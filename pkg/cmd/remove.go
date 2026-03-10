@@ -22,17 +22,22 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewWorkspaceCmd() *cobra.Command {
+func NewRemoveCmd() *cobra.Command {
+	// Create the workspace remove command
+	workspaceRemoveCmd := NewWorkspaceRemoveCmd()
+
+	// Create an alias command that delegates to workspace remove
 	cmd := &cobra.Command{
-		Use:   "workspace",
-		Short: "Manage workspaces",
-		Long:  "Manage workspaces registered with kortex-cli init",
-		Args:  cobra.NoArgs,
+		Use:     "remove ID",
+		Short:   workspaceRemoveCmd.Short,
+		Long:    workspaceRemoveCmd.Long,
+		Args:    workspaceRemoveCmd.Args,
+		PreRunE: workspaceRemoveCmd.PreRunE,
+		RunE:    workspaceRemoveCmd.RunE,
 	}
 
-	// Add subcommands
-	cmd.AddCommand(NewWorkspaceListCmd())
-	cmd.AddCommand(NewWorkspaceRemoveCmd())
+	// Copy flags from workspace remove command
+	cmd.Flags().AddFlagSet(workspaceRemoveCmd.Flags())
 
 	return cmd
 }

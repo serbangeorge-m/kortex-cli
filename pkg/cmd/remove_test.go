@@ -19,20 +19,24 @@
 package cmd
 
 import (
-	"github.com/spf13/cobra"
+	"testing"
 )
 
-func NewWorkspaceCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "workspace",
-		Short: "Manage workspaces",
-		Long:  "Manage workspaces registered with kortex-cli init",
-		Args:  cobra.NoArgs,
+func TestRemoveCmd(t *testing.T) {
+	t.Parallel()
+
+	cmd := NewRemoveCmd()
+	if cmd == nil {
+		t.Fatal("NewRemoveCmd() returned nil")
 	}
 
-	// Add subcommands
-	cmd.AddCommand(NewWorkspaceListCmd())
-	cmd.AddCommand(NewWorkspaceRemoveCmd())
+	if cmd.Use != "remove ID" {
+		t.Errorf("Expected Use to be 'remove ID', got '%s'", cmd.Use)
+	}
 
-	return cmd
+	// Verify it has the same behavior as workspace remove
+	workspaceRemoveCmd := NewWorkspaceRemoveCmd()
+	if cmd.Short != workspaceRemoveCmd.Short {
+		t.Errorf("Expected Short to match workspace remove, got '%s'", cmd.Short)
+	}
 }
