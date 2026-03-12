@@ -68,6 +68,12 @@ make clean
 
 # Install binary to GOPATH/bin
 make install
+
+# Run local quality report (coverage gaps + mutation testing)
+make quality-report
+
+# Run mutation testing only
+make test-mutate
 ```
 
 ## Architecture
@@ -281,6 +287,16 @@ Commands should have two types of tests following the pattern in `pkg/cmd/init_t
 
 **Reference:** See `pkg/cmd/init_test.go` for complete examples of both `preRun` unit tests (in `TestInitCmd_PreRun`) and E2E tests (in `TestInitCmd_E2E`).
 
+3. **Contract Tests** - Test the CLI from a consumer's perspective (e.g., the desktop app):
+   - Located in `pkg/cmd/contract_test.go`
+   - Test stdout output formats, JSON schema stability, and error behavior
+   - Use `execCmd()` / `mustExecCmd()` helpers to execute commands and capture output
+   - Verify exact field names and structure of JSON output against the API types
+   - Test storage resilience (corrupted files, empty files, isolated storage)
+   - These tests catch breaking changes to the CLI's external interface
+
+**Reference:** See `pkg/cmd/contract_test.go` for the complete contract test suite.
+
 ### Working with the Instances Manager
 
 When commands need to interact with workspaces:
@@ -472,6 +488,16 @@ When testing code that uses interfaces (following the Module Design Pattern), **
 
 **Reference:** See `pkg/instances/manager_test.go` for a complete implementation of this pattern with factory injection.
 
+## Coverage Requirements
+
+The project uses Codecov (configured in `codecov.yml`) to enforce coverage thresholds on pull requests:
+
+- **Project coverage**: Must stay above 80% overall (1% threshold for tolerance)
+- **Patch coverage**: New/changed lines must have at least 80% test coverage
+- **Ignored paths**: `scripts/**` and `cmd/kortex-cli/main.go` are excluded
+
+When adding new code, ensure it has adequate test coverage or the PR check will fail.
+
 ## GitHub Actions
 
 GitHub Actions workflows are stored in `.github/workflows/`. All workflows must use commit SHA1 hashes instead of version tags for security reasons (to prevent supply chain attacks from tag manipulation).
@@ -482,3 +508,17 @@ Example:
 ```
 
 Always include the version as a comment for readability.
+
+### PR Checks (`pr-checks.yml`)
+
+Runs on every pull request:
+- **CI Checks**: Format check, vet, tests with `-race` on Ubuntu, macOS, and Windows
+- **Coverage**: Uploads to Codecov (enforces thresholds from `codecov.yml`)
+- **Container Test**: Builds and tests inside a minimal `golang:1.25` container using Podman on `linux/amd64` and `linux/arm64` (via QEMU)
+
+### Quality Report (`quality-report.yml`)
+
+Runs weekly (Monday 6am UTC) or manually via `workflow_dispatch`:
+- Analyzes per-function coverage gaps (0% and below 80%)
+- Runs mutation testing with gremlins
+- Generates a summary in the GitHub Actions UI
