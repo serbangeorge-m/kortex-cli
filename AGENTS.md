@@ -289,10 +289,13 @@ Commands should have two types of tests following the pattern in `pkg/cmd/init_t
 
 3. **Contract Tests** - Test the CLI from a consumer's perspective (e.g., the desktop app):
    - Located in `pkg/cmd/contract_test.go`
+   - Use `execCmd()` / `mustExecCmd()` helpers to execute commands and capture stdout + stderr
    - Test stdout output formats, JSON schema stability, and error behavior
-   - Use `execCmd()` / `mustExecCmd()` helpers to execute commands and capture output
    - Verify exact field names and structure of JSON output against the API types
    - Test storage resilience (corrupted files, empty files, isolated storage)
+   - Verify help text stability (command names, flag names in `--help` output)
+   - Verify stderr content for error messages and clean stderr on success
+   - Test special character handling (spaces, unicode in names and paths)
    - These tests catch breaking changes to the CLI's external interface
 
 **Reference:** See `pkg/cmd/contract_test.go` for the complete contract test suite.

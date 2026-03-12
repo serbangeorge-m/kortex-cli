@@ -31,23 +31,24 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// helpers — execute a CLI command and return stdout
+// helpers — execute a CLI command and return stdout + stderr
 // ---------------------------------------------------------------------------
 
-func execCmd(t *testing.T, args ...string) (stdout string, err error) {
+func execCmd(t *testing.T, args ...string) (stdout, stderr string, err error) {
 	t.Helper()
 	rootCmd := NewRootCmd()
-	buf := new(bytes.Buffer)
-	rootCmd.SetOut(buf)
-	rootCmd.SetErr(new(bytes.Buffer))
+	outBuf := new(bytes.Buffer)
+	errBuf := new(bytes.Buffer)
+	rootCmd.SetOut(outBuf)
+	rootCmd.SetErr(errBuf)
 	rootCmd.SetArgs(args)
 	err = rootCmd.Execute()
-	return buf.String(), err
+	return outBuf.String(), errBuf.String(), err
 }
 
 func mustExecCmd(t *testing.T, args ...string) string {
 	t.Helper()
-	out, err := execCmd(t, args...)
+	out, _, err := execCmd(t, args...)
 	if err != nil {
 		t.Fatalf("command %v failed: %v", args, err)
 	}
@@ -493,7 +494,7 @@ func TestContract_OutputFormat(t *testing.T) {
 
 		storageDir := t.TempDir()
 
-		_, err := execCmd(t,
+		_, _, err := execCmd(t,
 			"--storage", storageDir, "workspace", "remove", "nonexistent-id")
 		if err == nil {
 			t.Fatal("expected error for nonexistent workspace, got nil")
@@ -504,7 +505,7 @@ func TestContract_OutputFormat(t *testing.T) {
 		}
 
 		// Verify init also returns errors through Execute
-		_, err = execCmd(t,
+		_, _, err = execCmd(t,
 			"--storage", storageDir, "init", filepath.Join(storageDir, "does-not-exist"))
 		if err == nil {
 			t.Fatal("expected error for nonexistent sources dir, got nil")
@@ -529,7 +530,7 @@ func TestContract_StorageResilience(t *testing.T) {
 			t.Fatalf("failed to write corrupted file: %v", err)
 		}
 
-		_, err := execCmd(t,
+		_, _, err := execCmd(t,
 			"--storage", storageDir, "workspace", "list", "-o", "json")
 		if err == nil {
 			t.Error("expected error with corrupted storage, got nil")
@@ -653,6 +654,270 @@ func TestContract_StorageResilience(t *testing.T) {
 		}
 		if listed.Items[0].Name != "persist-test" {
 			t.Errorf("persisted Name = %s, want persist-test", listed.Items[0].Name)
+		}
+	})
+}
+
+// ---------------------------------------------------------------------------
+// 5. Help Text Stability Tests
+// ---------------------------------------------------------------------------
+
+func TestContract_HelpText(t *testing.T) {
+	t.Parallel()
+
+	// FAILS IF: a top-level command is renamed or removed.
+	t.Run("root help lists all commands", func(t *testing.T) {
+		t.Parallel()
+
+		out := mustExecCmd(t, "--help")
+
+		expectedCommands := []string{"init", "workspace", "version", "list", "remove"}
+		for _, cmd := range expectedCommands {
+			if !strings.Contains(out, cmd) {
+				t.Errorf("root help missing command %q, got:\n%s", cmd, out)
+			}
+		}
+	})
+
+	// FAILS IF: an init flag is renamed or removed.
+	t.Run("init help lists all flags", func(t *testing.T) {
+		t.Parallel()
+
+		out := mustExecCmd(t, "init", "--help")
+
+		expectedFlags := []string{"--name", "--verbose", "--workspace-configuration", "--storage"}
+		for _, flag := range expectedFlags {
+			if !strings.Contains(out, flag) {
+				t.Errorf("init help missing flag %q, got:\n%s", flag, out)
+			}
+		}
+	})
+
+	// FAILS IF: a workspace subcommand is renamed or removed.
+	t.Run("workspace help lists subcommands", func(t *testing.T) {
+		t.Parallel()
+
+		out := mustExecCmd(t, "workspace", "--help")
+
+		expectedSubs := []string{"list", "remove"}
+		for _, sub := range expectedSubs {
+			if !strings.Contains(out, sub) {
+				t.Errorf("workspace help missing subcommand %q, got:\n%s", sub, out)
+			}
+		}
+	})
+
+	// FAILS IF: the --output flag is renamed or removed from workspace list.
+	t.Run("workspace list help lists output flag", func(t *testing.T) {
+		t.Parallel()
+
+		out := mustExecCmd(t, "workspace", "list", "--help")
+
+		if !strings.Contains(out, "--output") {
+			t.Errorf("workspace list help missing --output flag, got:\n%s", out)
+		}
+	})
+
+	// FAILS IF: workspace remove stops showing the ID argument in usage.
+	t.Run("workspace remove help shows ID argument", func(t *testing.T) {
+		t.Parallel()
+
+		out := mustExecCmd(t, "workspace", "remove", "--help")
+
+		if !strings.Contains(out, "ID") {
+			t.Errorf("workspace remove help missing ID argument, got:\n%s", out)
+		}
+	})
+}
+
+// ---------------------------------------------------------------------------
+// 6. Stderr Content Tests
+// ---------------------------------------------------------------------------
+
+func TestContract_Stderr(t *testing.T) {
+	t.Parallel()
+
+	// FAILS IF: error for nonexistent workspace is not written to stderr.
+	t.Run("remove nonexistent writes to stderr", func(t *testing.T) {
+		t.Parallel()
+
+		storageDir := t.TempDir()
+
+		_, stderr, _ := execCmd(t,
+			"--storage", storageDir, "workspace", "remove", "nonexistent-id")
+
+		if !strings.Contains(stderr, "workspace not found") {
+			t.Errorf("stderr = %q, want it to contain 'workspace not found'", stderr)
+		}
+	})
+
+	// FAILS IF: error for nonexistent sources path is not written to stderr.
+	t.Run("init nonexistent path writes to stderr", func(t *testing.T) {
+		t.Parallel()
+
+		storageDir := t.TempDir()
+
+		_, stderr, _ := execCmd(t,
+			"--storage", storageDir, "init", filepath.Join(storageDir, "does-not-exist"))
+
+		if !strings.Contains(stderr, "sources directory does not exist") {
+			t.Errorf("stderr = %q, want it to contain 'sources directory does not exist'", stderr)
+		}
+	})
+
+	// FAILS IF: error for invalid output format is not written to stderr.
+	t.Run("invalid output format writes to stderr", func(t *testing.T) {
+		t.Parallel()
+
+		storageDir := t.TempDir()
+
+		_, stderr, _ := execCmd(t,
+			"--storage", storageDir, "workspace", "list", "-o", "xml")
+
+		if !strings.Contains(stderr, "unsupported output format") {
+			t.Errorf("stderr = %q, want it to contain 'unsupported output format'", stderr)
+		}
+	})
+
+	// FAILS IF: successful commands produce unexpected output on stderr.
+	t.Run("successful commands produce empty stderr", func(t *testing.T) {
+		t.Parallel()
+
+		storageDir := t.TempDir()
+		sourcesDir := t.TempDir()
+
+		_, stderr, err := execCmd(t,
+			"--storage", storageDir, "init", sourcesDir, "--name", "stderr-test")
+		if err != nil {
+			t.Fatalf("init failed: %v", err)
+		}
+		if stderr != "" {
+			t.Errorf("init produced stderr output: %q", stderr)
+		}
+
+		_, stderr, err = execCmd(t,
+			"--storage", storageDir, "workspace", "list", "-o", "json")
+		if err != nil {
+			t.Fatalf("list failed: %v", err)
+		}
+		if stderr != "" {
+			t.Errorf("list produced stderr output: %q", stderr)
+		}
+	})
+}
+
+// ---------------------------------------------------------------------------
+// 7. Special Character Tests
+// ---------------------------------------------------------------------------
+
+func TestContract_SpecialCharacters(t *testing.T) {
+	t.Parallel()
+
+	// FAILS IF: workspace names with spaces are truncated or mangled.
+	t.Run("workspace name with spaces", func(t *testing.T) {
+		t.Parallel()
+
+		storageDir := t.TempDir()
+		sourcesDir := t.TempDir()
+		name := "My Project Name"
+
+		mustExecCmd(t,
+			"--storage", storageDir, "init", sourcesDir, "--name", name)
+
+		listOut := mustExecCmd(t,
+			"--storage", storageDir, "workspace", "list", "-o", "json")
+
+		var listed api.WorkspacesList
+		if err := json.Unmarshal([]byte(listOut), &listed); err != nil {
+			t.Fatalf("failed to parse JSON: %v", err)
+		}
+		if len(listed.Items) != 1 {
+			t.Fatalf("expected 1 workspace, got %d", len(listed.Items))
+		}
+		if listed.Items[0].Name != name {
+			t.Errorf("name = %q, want %q", listed.Items[0].Name, name)
+		}
+	})
+
+	// FAILS IF: workspace names with unicode are corrupted or rejected.
+	t.Run("workspace name with unicode", func(t *testing.T) {
+		t.Parallel()
+
+		storageDir := t.TempDir()
+		sourcesDir := t.TempDir()
+		name := "projekt-übersicht"
+
+		mustExecCmd(t,
+			"--storage", storageDir, "init", sourcesDir, "--name", name)
+
+		listOut := mustExecCmd(t,
+			"--storage", storageDir, "workspace", "list", "-o", "json")
+
+		var listed api.WorkspacesList
+		if err := json.Unmarshal([]byte(listOut), &listed); err != nil {
+			t.Fatalf("failed to parse JSON: %v", err)
+		}
+		if len(listed.Items) != 1 {
+			t.Fatalf("expected 1 workspace, got %d", len(listed.Items))
+		}
+		if listed.Items[0].Name != name {
+			t.Errorf("name = %q, want %q", listed.Items[0].Name, name)
+		}
+	})
+
+	// FAILS IF: source directories with spaces cause init to fail or paths to be mangled.
+	t.Run("source directory with spaces", func(t *testing.T) {
+		t.Parallel()
+
+		storageDir := t.TempDir()
+		sourcesDir := filepath.Join(t.TempDir(), "my project")
+		if err := os.MkdirAll(sourcesDir, 0755); err != nil {
+			t.Fatalf("failed to create dir with spaces: %v", err)
+		}
+
+		mustExecCmd(t,
+			"--storage", storageDir, "init", sourcesDir, "--name", "space-path")
+
+		listOut := mustExecCmd(t,
+			"--storage", storageDir, "workspace", "list", "-o", "json")
+
+		var listed api.WorkspacesList
+		if err := json.Unmarshal([]byte(listOut), &listed); err != nil {
+			t.Fatalf("failed to parse JSON: %v", err)
+		}
+		if len(listed.Items) != 1 {
+			t.Fatalf("expected 1 workspace, got %d", len(listed.Items))
+		}
+		if listed.Items[0].Paths.Source != sourcesDir {
+			t.Errorf("source = %q, want %q", listed.Items[0].Paths.Source, sourcesDir)
+		}
+	})
+
+	// FAILS IF: source directories with unicode cause init to fail or paths to be corrupted.
+	t.Run("source directory with unicode", func(t *testing.T) {
+		t.Parallel()
+
+		storageDir := t.TempDir()
+		sourcesDir := filepath.Join(t.TempDir(), "проект")
+		if err := os.MkdirAll(sourcesDir, 0755); err != nil {
+			t.Fatalf("failed to create dir with unicode: %v", err)
+		}
+
+		mustExecCmd(t,
+			"--storage", storageDir, "init", sourcesDir, "--name", "unicode-path")
+
+		listOut := mustExecCmd(t,
+			"--storage", storageDir, "workspace", "list", "-o", "json")
+
+		var listed api.WorkspacesList
+		if err := json.Unmarshal([]byte(listOut), &listed); err != nil {
+			t.Fatalf("failed to parse JSON: %v", err)
+		}
+		if len(listed.Items) != 1 {
+			t.Fatalf("expected 1 workspace, got %d", len(listed.Items))
+		}
+		if listed.Items[0].Paths.Source != sourcesDir {
+			t.Errorf("source = %q, want %q", listed.Items[0].Paths.Source, sourcesDir)
 		}
 	})
 }
