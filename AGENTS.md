@@ -522,9 +522,8 @@ Runs on every pull request:
 - **Coverage**: Uploads to Codecov (enforces thresholds from `codecov.yml`)
 - **Container Test**: Builds and tests inside a minimal `golang:1.25` container using Podman on `linux/amd64` and `linux/arm64` (via QEMU)
 
-### Quality Report (`quality-report.yml`)
+### Local Quality Tooling
 
-Runs weekly (Monday 6am UTC) or manually via `workflow_dispatch`:
-- Analyzes per-function coverage gaps (0% and below 80%)
-- Runs mutation testing with gremlins
-- Generates a summary in the GitHub Actions UI
+For local analysis (not run in CI):
+- `make quality-report` — coverage gap analysis and mutation testing summary
+- `make test-mutate` — mutation testing only (requires `gremlins`)

@@ -4,11 +4,10 @@ This document describes the testing and quality assurance infrastructure for kor
 
 ## Overview
 
-Quality is enforced at three levels:
+Quality is enforced at two levels:
 
 1. **PR checks** — automated gates that block merging if quality standards are not met
-2. **Weekly quality report** — deeper analysis that tracks trends over time
-3. **Local tooling** — Make targets for developers to run quality checks before pushing
+2. **Local tooling** — Make targets for developers to run quality checks before pushing
 
 ```text
                      ┌─────────────────────────────────┐
@@ -152,52 +151,6 @@ These tests catch breaking changes to the CLI's external interface that would af
 
 ---
 
-## Weekly Quality Report (`quality-report.yml`)
-
-Runs every Monday at 06:00 UTC (or manually via `workflow_dispatch`). Does not block PRs — provides visibility into quality trends.
-
-### Coverage Analysis Job
-
-1. Runs all tests with coverage profiling
-2. Generates per-function coverage report
-3. Identifies uncovered functions (0%) and partially covered functions (below 80%)
-4. Uploads `coverage.out`, `coverage.html`, `func-coverage.txt`, `gaps.txt`, and `partial-gaps.txt` as downloadable artifacts
-
-### Mutation Testing Job
-
-1. Installs [gremlins](https://github.com/go-gremlins/gremlins)
-2. Runs mutation testing against all packages in `pkg/`
-3. Mutation testing makes small code changes (e.g., `>` to `<`, removing a `return`) and re-runs tests
-4. If tests still pass after a mutation, that mutant "survived" — indicating a test gap
-5. Uploads `mutation-report.txt` as a downloadable artifact
-
-### Quality Summary Job
-
-Waits for both jobs above, then renders a markdown summary in the GitHub Actions UI:
-
-```text
-# Quality Report
-
-## Coverage
-| Metric                    | Value |
-|---------------------------|-------|
-| Total coverage            | 85.2% |
-| Uncovered functions (0%)  | 3     |
-| Partially covered (< 80%) | 5     |
-
-## Mutation Testing
-| Metric         | Value |
-|----------------|-------|
-| Mutation score | 72%   |
-| Killed         | 36    |
-| Survived       | 14    |
-| Not covered    | 8     |
-| Timed out      | 2     |
-| Total mutants  | 60    |
-```
-
----
-
 ## Local Quality Tooling
 
 ### Quality Report
@@ -206,7 +159,7 @@ Waits for both jobs above, then renders a markdown summary in the GitHub Actions
 make quality-report
 ```
 
-Runs the same analysis as the weekly workflow locally:
+Runs coverage gap analysis and mutation testing locally:
 
 - Prints total coverage, number of uncovered functions, and partially covered functions
 - If `gremlins` is installed, runs mutation testing and prints the kill score
@@ -232,7 +185,6 @@ go install github.com/go-gremlins/gremlins/cmd/gremlins@latest
 |------|---------|
 | `codecov.yml` | Coverage thresholds for PR status checks (80% project, 80% patch) |
 | `.github/workflows/pr-checks.yml` | PR gate — CI checks, coverage upload, container tests |
-| `.github/workflows/quality-report.yml` | Weekly quality analysis — coverage gaps, mutation testing |
 | `Makefile` | Local targets: `test`, `test-coverage`, `test-mutate`, `quality-report`, `ci-checks` |
 
 ---
