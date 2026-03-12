@@ -989,6 +989,467 @@ func TestContract_UnknownInputs(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// 9. CLI Standards Tests
+// ---------------------------------------------------------------------------
+
+func TestContract_CLIStandards(t *testing.T) {
+	t.Parallel()
+
+	// -----------------------------------------------------------------------
+	// 9a. Exit codes: err == nil means exit 0, err != nil means exit 1.
+	// main.go maps these via os.Exit(1) on error.
+	// -----------------------------------------------------------------------
+
+	// FAILS IF: a successful command returns a non-nil error (would cause exit 1).
+	t.Run("successful commands return nil error", func(t *testing.T) {
+		t.Parallel()
+
+		storageDir := t.TempDir()
+		sourcesDir := t.TempDir()
+
+		// init
+		_, _, err := execCmd(t,
+			"--storage", storageDir, "init", sourcesDir, "--name", "exit-test")
+		if err != nil {
+			t.Errorf("init returned error (exit 1): %v", err)
+		}
+
+		// list
+		_, _, err = execCmd(t,
+			"--storage", storageDir, "workspace", "list")
+		if err != nil {
+			t.Errorf("list returned error (exit 1): %v", err)
+		}
+
+		// list -o json
+		_, _, err = execCmd(t,
+			"--storage", storageDir, "workspace", "list", "-o", "json")
+		if err != nil {
+			t.Errorf("list -o json returned error (exit 1): %v", err)
+		}
+
+		// version
+		_, _, err = execCmd(t, "version")
+		if err != nil {
+			t.Errorf("version returned error (exit 1): %v", err)
+		}
+
+		// --help
+		_, _, err = execCmd(t, "--help")
+		if err != nil {
+			t.Errorf("--help returned error (exit 1): %v", err)
+		}
+	})
+
+	// FAILS IF: a failed command returns nil error (would cause exit 0).
+	t.Run("failed commands return non-nil error", func(t *testing.T) {
+		t.Parallel()
+
+		storageDir := t.TempDir()
+
+		// remove nonexistent
+		_, _, err := execCmd(t,
+			"--storage", storageDir, "workspace", "remove", "nonexistent-id")
+		if err == nil {
+			t.Error("remove nonexistent returned nil error (exit 0), want error (exit 1)")
+		}
+
+		// init nonexistent path
+		_, _, err = execCmd(t,
+			"--storage", storageDir, "init", filepath.Join(storageDir, "no-such-dir"))
+		if err == nil {
+			t.Error("init nonexistent path returned nil error (exit 0), want error (exit 1)")
+		}
+
+		// invalid output format
+		_, _, err = execCmd(t,
+			"--storage", storageDir, "workspace", "list", "-o", "xml")
+		if err == nil {
+			t.Error("list -o xml returned nil error (exit 0), want error (exit 1)")
+		}
+	})
+
+	// -----------------------------------------------------------------------
+	// 9b. --help works on every subcommand without error.
+	// -----------------------------------------------------------------------
+
+	// FAILS IF: --help on any subcommand returns an error or produces empty output.
+	t.Run("help flag works on all subcommands", func(t *testing.T) {
+		t.Parallel()
+
+		subcommands := [][]string{
+			{"--help"},
+			{"version", "--help"},
+			{"init", "--help"},
+			{"workspace", "--help"},
+			{"workspace", "list", "--help"},
+			{"workspace", "remove", "--help"},
+			{"list", "--help"},
+			{"remove", "--help"},
+		}
+
+		for _, args := range subcommands {
+			cmdName := strings.Join(args, " ")
+			out, stderr, err := execCmd(t, args...)
+			if err != nil {
+				t.Errorf("%s returned error: %v", cmdName, err)
+			}
+			if strings.TrimSpace(out) == "" {
+				t.Errorf("%s produced empty stdout", cmdName)
+			}
+			if stderr != "" {
+				t.Errorf("%s produced stderr: %q", cmdName, stderr)
+			}
+		}
+	})
+
+	// -----------------------------------------------------------------------
+	// 9c. Stderr for errors, stdout for data — never mixed.
+	// -----------------------------------------------------------------------
+
+	// FAILS IF: successful data commands leak anything to stderr.
+	t.Run("data commands write only to stdout", func(t *testing.T) {
+		t.Parallel()
+
+		storageDir := t.TempDir()
+		sourcesDir := t.TempDir()
+
+		// init — stdout is the ID, stderr must be empty
+		_, stderr, err := execCmd(t,
+			"--storage", storageDir, "init", sourcesDir, "--name", "stdout-test")
+		if err != nil {
+			t.Fatalf("init failed: %v", err)
+		}
+		if stderr != "" {
+			t.Errorf("init leaked to stderr: %q", stderr)
+		}
+
+		// init --verbose — stdout is the verbose output, stderr must be empty
+		sourcesDir2 := t.TempDir()
+		_, stderr, err = execCmd(t,
+			"--storage", storageDir, "init", sourcesDir2, "--name", "stdout-verbose", "--verbose")
+		if err != nil {
+			t.Fatalf("init --verbose failed: %v", err)
+		}
+		if stderr != "" {
+			t.Errorf("init --verbose leaked to stderr: %q", stderr)
+		}
+
+		// list -o json — stdout is JSON, stderr must be empty
+		_, stderr, err = execCmd(t,
+			"--storage", storageDir, "workspace", "list", "-o", "json")
+		if err != nil {
+			t.Fatalf("list -o json failed: %v", err)
+		}
+		if stderr != "" {
+			t.Errorf("list -o json leaked to stderr: %q", stderr)
+		}
+
+		// list (text) — stdout is text, stderr must be empty
+		_, stderr, err = execCmd(t,
+			"--storage", storageDir, "workspace", "list")
+		if err != nil {
+			t.Fatalf("list failed: %v", err)
+		}
+		if stderr != "" {
+			t.Errorf("list leaked to stderr: %q", stderr)
+		}
+
+		// version — stdout is version string, stderr must be empty
+		_, stderr, err = execCmd(t, "version")
+		if err != nil {
+			t.Fatalf("version failed: %v", err)
+		}
+		if stderr != "" {
+			t.Errorf("version leaked to stderr: %q", stderr)
+		}
+	})
+
+	// FAILS IF: error commands produce empty stderr (error details must reach the user).
+	// Note: Cobra writes usage text to stdout on error by default — this is standard
+	// Cobra behavior and not a violation. We only assert that stderr is non-empty.
+	t.Run("error commands always write to stderr", func(t *testing.T) {
+		t.Parallel()
+
+		storageDir := t.TempDir()
+
+		// remove nonexistent
+		_, stderr, _ := execCmd(t,
+			"--storage", storageDir, "workspace", "remove", "nonexistent-id")
+		if stderr == "" {
+			t.Error("remove nonexistent produced empty stderr, want error message")
+		}
+
+		// init nonexistent path
+		_, stderr, _ = execCmd(t,
+			"--storage", storageDir, "init", filepath.Join(storageDir, "no-such-dir"))
+		if stderr == "" {
+			t.Error("init nonexistent produced empty stderr, want error message")
+		}
+	})
+
+	// -----------------------------------------------------------------------
+	// 9d. Non-verbose mode never mixes human text into stdout.
+	// -----------------------------------------------------------------------
+
+	// FAILS IF: init default (non-verbose) output contains anything other than
+	// machine-parseable data (the workspace ID).
+	t.Run("non-verbose init is machine parseable", func(t *testing.T) {
+		t.Parallel()
+
+		storageDir := t.TempDir()
+		sourcesDir := t.TempDir()
+
+		out, _, err := execCmd(t,
+			"--storage", storageDir, "init", sourcesDir, "--name", "machine-test")
+		if err != nil {
+			t.Fatalf("init failed: %v", err)
+		}
+
+		lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+		if len(lines) != 1 {
+			t.Errorf("non-verbose init produced %d lines, want 1: %q", len(lines), out)
+		}
+
+		// The single line should be a hex ID — no colons, no labels, no prose
+		id := strings.TrimSpace(lines[0])
+		if strings.ContainsAny(id, " \t:") {
+			t.Errorf("non-verbose init output contains human text: %q", id)
+		}
+	})
+
+	// FAILS IF: list -o json output contains anything outside the JSON object
+	// (e.g., log lines, warnings, progress messages).
+	t.Run("json output is pure JSON with no surrounding text", func(t *testing.T) {
+		t.Parallel()
+
+		storageDir := t.TempDir()
+		sourcesDir := t.TempDir()
+
+		mustExecCmd(t, "--storage", storageDir, "init", sourcesDir, "--name", "pure-json")
+
+		out := mustExecCmd(t,
+			"--storage", storageDir, "workspace", "list", "-o", "json")
+
+		trimmed := strings.TrimSpace(out)
+		if !strings.HasPrefix(trimmed, "{") {
+			t.Errorf("JSON output does not start with '{': %q", trimmed[:min(50, len(trimmed))])
+		}
+		if !strings.HasSuffix(trimmed, "}") {
+			t.Errorf("JSON output does not end with '}': %q", trimmed[max(0, len(trimmed)-50):])
+		}
+
+		// Verify it's valid JSON (no trailing garbage)
+		var raw json.RawMessage
+		if err := json.Unmarshal([]byte(trimmed), &raw); err != nil {
+			t.Errorf("output is not valid JSON: %v\nOutput: %s", err, trimmed)
+		}
+	})
+}
+
+// ---------------------------------------------------------------------------
+// 10. Flag Behavior Tests
+// ---------------------------------------------------------------------------
+
+func TestContract_FlagBehavior(t *testing.T) {
+	t.Parallel()
+
+	// -----------------------------------------------------------------------
+	// 10a. --storage flag controls where data is stored.
+	// -----------------------------------------------------------------------
+
+	// FAILS IF: --storage flag stops isolating data between different paths.
+	t.Run("storage flag controls data location", func(t *testing.T) {
+		t.Parallel()
+
+		storageA := t.TempDir()
+		storageB := t.TempDir()
+		sourcesDir := t.TempDir()
+
+		// Init workspace in storage A
+		wsID := strings.TrimSpace(mustExecCmd(t,
+			"--storage", storageA, "init", sourcesDir, "--name", "storage-flag-test"))
+
+		// List from storage A — should find the workspace
+		listA := mustExecCmd(t, "--storage", storageA, "workspace", "list", "-o", "json")
+		listedA := mustParseWorkspacesList(t, listA)
+		if len(listedA.Items) != 1 {
+			t.Fatalf("storage A: expected 1 workspace, got %d", len(listedA.Items))
+		}
+		if listedA.Items[0].Id != wsID {
+			t.Errorf("storage A: ID = %s, want %s", listedA.Items[0].Id, wsID)
+		}
+
+		// List from storage B — should be empty
+		listB := mustExecCmd(t, "--storage", storageB, "workspace", "list", "-o", "json")
+		listedB := mustParseWorkspacesList(t, listB)
+		if len(listedB.Items) != 0 {
+			t.Errorf("storage B: expected 0 workspaces, got %d", len(listedB.Items))
+		}
+
+		// Remove from storage B — should fail (workspace is in A, not B)
+		_, _, err := execCmd(t, "--storage", storageB, "workspace", "remove", wsID)
+		if err == nil {
+			t.Error("remove from wrong storage succeeded, want error")
+		}
+
+		// Remove from storage A — should succeed
+		mustExecCmd(t, "--storage", storageA, "workspace", "remove", wsID)
+
+		// Verify storage A is now empty
+		listA2 := mustExecCmd(t, "--storage", storageA, "workspace", "list", "-o", "json")
+		listedA2 := mustParseWorkspacesList(t, listA2)
+		if len(listedA2.Items) != 0 {
+			t.Errorf("storage A after remove: expected 0 workspaces, got %d", len(listedA2.Items))
+		}
+	})
+
+	// -----------------------------------------------------------------------
+	// 10b. --workspace-configuration flag sets custom config directory.
+	// -----------------------------------------------------------------------
+
+	// FAILS IF: --workspace-configuration flag is ignored or the custom path is not stored.
+	t.Run("workspace-configuration flag sets custom config path", func(t *testing.T) {
+		t.Parallel()
+
+		storageDir := t.TempDir()
+		sourcesDir := t.TempDir()
+		customConfig := filepath.Join(t.TempDir(), "my-custom-config")
+
+		mustExecCmd(t,
+			"--storage", storageDir, "init", sourcesDir,
+			"--name", "custom-config-test",
+			"--workspace-configuration", customConfig)
+
+		listOut := mustExecCmd(t,
+			"--storage", storageDir, "workspace", "list", "-o", "json")
+		listed := mustParseWorkspacesList(t, listOut)
+		if len(listed.Items) != 1 {
+			t.Fatalf("expected 1 workspace, got %d", len(listed.Items))
+		}
+		if listed.Items[0].Paths.Configuration != customConfig {
+			t.Errorf("config path = %q, want %q", listed.Items[0].Paths.Configuration, customConfig)
+		}
+	})
+
+	// FAILS IF: omitting --workspace-configuration stops defaulting to <source>/.kortex.
+	t.Run("workspace-configuration defaults to source/.kortex", func(t *testing.T) {
+		t.Parallel()
+
+		storageDir := t.TempDir()
+		sourcesDir := t.TempDir()
+
+		mustExecCmd(t,
+			"--storage", storageDir, "init", sourcesDir, "--name", "default-config-test")
+
+		listOut := mustExecCmd(t,
+			"--storage", storageDir, "workspace", "list", "-o", "json")
+		listed := mustParseWorkspacesList(t, listOut)
+		if len(listed.Items) != 1 {
+			t.Fatalf("expected 1 workspace, got %d", len(listed.Items))
+		}
+
+		expectedConfig := filepath.Join(sourcesDir, ".kortex")
+		if listed.Items[0].Paths.Configuration != expectedConfig {
+			t.Errorf("default config path = %q, want %q",
+				listed.Items[0].Paths.Configuration, expectedConfig)
+		}
+	})
+
+	// -----------------------------------------------------------------------
+	// 10c. Name auto-generation from source directory basename.
+	// -----------------------------------------------------------------------
+
+	// FAILS IF: omitting --name stops generating a name from the source directory.
+	t.Run("name auto-generated from source directory basename", func(t *testing.T) {
+		t.Parallel()
+
+		storageDir := t.TempDir()
+		sourcesDir := filepath.Join(t.TempDir(), "my-cool-project")
+		if err := os.MkdirAll(sourcesDir, 0755); err != nil {
+			t.Fatalf("failed to create source dir: %v", err)
+		}
+
+		mustExecCmd(t,
+			"--storage", storageDir, "init", sourcesDir)
+
+		listOut := mustExecCmd(t,
+			"--storage", storageDir, "workspace", "list", "-o", "json")
+		listed := mustParseWorkspacesList(t, listOut)
+		if len(listed.Items) != 1 {
+			t.Fatalf("expected 1 workspace, got %d", len(listed.Items))
+		}
+		if listed.Items[0].Name != "my-cool-project" {
+			t.Errorf("auto-generated name = %q, want %q",
+				listed.Items[0].Name, "my-cool-project")
+		}
+	})
+
+	// FAILS IF: auto-generated names collide instead of being de-duplicated.
+	t.Run("name auto-generation deduplicates on conflict", func(t *testing.T) {
+		t.Parallel()
+
+		storageDir := t.TempDir()
+
+		// Create two source dirs with the same basename
+		parent1 := t.TempDir()
+		parent2 := t.TempDir()
+		sources1 := filepath.Join(parent1, "project")
+		sources2 := filepath.Join(parent2, "project")
+		if err := os.MkdirAll(sources1, 0755); err != nil {
+			t.Fatalf("failed to create source dir 1: %v", err)
+		}
+		if err := os.MkdirAll(sources2, 0755); err != nil {
+			t.Fatalf("failed to create source dir 2: %v", err)
+		}
+
+		mustExecCmd(t, "--storage", storageDir, "init", sources1)
+		mustExecCmd(t, "--storage", storageDir, "init", sources2)
+
+		listOut := mustExecCmd(t,
+			"--storage", storageDir, "workspace", "list", "-o", "json")
+		listed := mustParseWorkspacesList(t, listOut)
+		if len(listed.Items) != 2 {
+			t.Fatalf("expected 2 workspaces, got %d", len(listed.Items))
+		}
+
+		name1 := listed.Items[0].Name
+		name2 := listed.Items[1].Name
+		if name1 == name2 {
+			t.Errorf("auto-generated names collided: both are %q", name1)
+		}
+		// First should be "project", second should be "project-2"
+		if name1 != "project" {
+			t.Errorf("first workspace name = %q, want %q", name1, "project")
+		}
+		if name2 != "project-2" {
+			t.Errorf("second workspace name = %q, want %q", name2, "project-2")
+		}
+	})
+
+	// FAILS IF: auto-generated name is empty or whitespace.
+	t.Run("auto-generated name is never empty", func(t *testing.T) {
+		t.Parallel()
+
+		storageDir := t.TempDir()
+		sourcesDir := t.TempDir()
+
+		mustExecCmd(t, "--storage", storageDir, "init", sourcesDir)
+
+		listOut := mustExecCmd(t,
+			"--storage", storageDir, "workspace", "list", "-o", "json")
+		listed := mustParseWorkspacesList(t, listOut)
+		if len(listed.Items) != 1 {
+			t.Fatalf("expected 1 workspace, got %d", len(listed.Items))
+		}
+		name := listed.Items[0].Name
+		if strings.TrimSpace(name) == "" {
+			t.Error("auto-generated name is empty or whitespace")
+		}
+	})
+}
+
+// ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
 

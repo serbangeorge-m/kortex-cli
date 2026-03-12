@@ -131,19 +131,22 @@ Test full command execution through Cobra.
 Test the CLI from the perspective of an external consumer (the kortex desktop app).
 
 - Located in `pkg/cmd/contract_test.go`
-- Use `execCmd()` / `mustExecCmd()` helpers that create a fresh `NewRootCmd()` per invocation
+- Use `execCmd()` / `mustExecCmd()` / `mustParseWorkspacesList()` helpers that create a fresh `NewRootCmd()` per invocation
 - `execCmd()` returns `(stdout, stderr, error)` for full output inspection
-- Seven test groups:
+- Ten test groups:
 
 | Group | Tests | What it validates |
 |-------|-------|-------------------|
-| `TestContract_Lifecycle` | 3 | Full CRUD flow, multi-workspace management, command aliases |
+| `TestContract_Lifecycle` | 4 | Full CRUD flow, duplicate init creates separate workspaces, multi-workspace management, command aliases |
 | `TestContract_JSONSchema` | 5 | Top-level `items` key, non-null empty array, exact field names (`id`, `name`, `paths.source`, `paths.configuration`), deterministic output, typed/untyped parsing agreement |
-| `TestContract_OutputFormat` | 4 | `init` outputs exactly one line (the ID), `init --verbose` outputs structured labels, `remove` outputs exactly one line (the ID), errors returned via `Execute()` |
+| `TestContract_OutputFormat` | 5 | `init` outputs exactly one line (the ID), `init --verbose` outputs structured labels, `version` outputs non-empty string, `remove` outputs exactly one line (the ID), errors returned via `Execute()` |
 | `TestContract_StorageResilience` | 5 | Corrupted JSON returns error (no panic), empty file treated as empty list, init works with empty file, isolated storage paths, persistence across command invocations |
 | `TestContract_HelpText` | 5 | Root help lists all commands, init help lists all flags, workspace help lists subcommands, workspace list help has `--output`, workspace remove help shows `ID` |
 | `TestContract_Stderr` | 4 | Error messages appear in stderr for invalid operations, successful commands produce empty stderr |
 | `TestContract_SpecialCharacters` | 4 | Workspace names with spaces and unicode round-trip correctly, source directories with spaces and unicode are stored and returned exactly |
+| `TestContract_UnknownInputs` | 3 | Unknown command shows help text, unknown flag returns error, extra arguments to no-args command returns error |
+| `TestContract_CLIStandards` | 7 | Successful commands return nil error (exit 0), failed commands return non-nil error (exit 1), `--help` works on all subcommands, data commands write only to stdout, error commands write to stderr, non-verbose init is machine-parseable, JSON output is pure JSON |
+| `TestContract_FlagBehavior` | 6 | `--storage` flag isolates data between paths, `--workspace-configuration` sets custom config path, config defaults to `<source>/.kortex`, name auto-generated from source basename, name deduplication on conflict, auto-generated name is never empty |
 
 These tests catch breaking changes to the CLI's external interface that would affect the desktop app.
 
