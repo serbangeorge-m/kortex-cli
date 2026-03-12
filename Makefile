@@ -122,4 +122,4 @@ quality-report: ## Run coverage gap analysis and mutation testing
 	fi
 	@echo ""
 	@echo "=== Report complete ==="
-	@rm -f func-coverage.txt
+	@rm -f coverage.out func-coverage.txt

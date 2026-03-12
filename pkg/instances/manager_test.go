@@ -1020,8 +1020,8 @@ func TestManager_ConcurrentAccess(t *testing.T) {
 			wg.Add(1)
 			go func(id int) {
 				defer wg.Done()
-				sourceDir := filepath.Join(instanceTmpDir, "source", string(rune('a'+id)))
-				configDir := filepath.Join(instanceTmpDir, "config", string(rune('a'+id)))
+				sourceDir := filepath.Join(instanceTmpDir, "source", fmt.Sprintf("%d", id))
+				configDir := filepath.Join(instanceTmpDir, "config", fmt.Sprintf("%d", id))
 				inst := newFakeInstance(newFakeInstanceParams{
 					SourceDir:  sourceDir,
 					ConfigDir:  configDir,
@@ -1048,8 +1048,8 @@ func TestManager_ConcurrentAccess(t *testing.T) {
 		instanceTmpDir := t.TempDir()
 		// Add some instances first
 		for i := 0; i < 5; i++ {
-			sourceDir := filepath.Join(instanceTmpDir, "source", string(rune('a'+i)))
-			configDir := filepath.Join(instanceTmpDir, "config", string(rune('a'+i)))
+			sourceDir := filepath.Join(instanceTmpDir, "source", fmt.Sprintf("%d", i))
+			configDir := filepath.Join(instanceTmpDir, "config", fmt.Sprintf("%d", i))
 			inst := newFakeInstance(newFakeInstanceParams{
 				SourceDir:  sourceDir,
 				ConfigDir:  configDir,

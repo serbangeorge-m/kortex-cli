@@ -525,7 +525,7 @@ func TestContract_StorageResilience(t *testing.T) {
 		t.Parallel()
 
 		storageDir := t.TempDir()
-		storageFile := filepath.Join(storageDir, "instances.json")
+		storageFile := filepath.Join(storageDir, instances.DefaultStorageFileName)
 		if err := os.WriteFile(storageFile, []byte("{invalid json!!!"), 0644); err != nil {
 			t.Fatalf("failed to write corrupted file: %v", err)
 		}
@@ -542,7 +542,7 @@ func TestContract_StorageResilience(t *testing.T) {
 		t.Parallel()
 
 		storageDir := t.TempDir()
-		storageFile := filepath.Join(storageDir, "instances.json")
+		storageFile := filepath.Join(storageDir, instances.DefaultStorageFileName)
 		if err := os.WriteFile(storageFile, []byte{}, 0644); err != nil {
 			t.Fatalf("failed to write empty file: %v", err)
 		}
@@ -564,7 +564,7 @@ func TestContract_StorageResilience(t *testing.T) {
 		t.Parallel()
 
 		storageDir := t.TempDir()
-		storageFile := filepath.Join(storageDir, "instances.json")
+		storageFile := filepath.Join(storageDir, instances.DefaultStorageFileName)
 		if err := os.WriteFile(storageFile, []byte{}, 0644); err != nil {
 			t.Fatalf("failed to write empty file: %v", err)
 		}
