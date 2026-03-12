@@ -55,6 +55,15 @@ func mustExecCmd(t *testing.T, args ...string) string {
 	return out
 }
 
+func mustParseWorkspacesList(t *testing.T, jsonOutput string) api.WorkspacesList {
+	t.Helper()
+	var result api.WorkspacesList
+	if err := json.Unmarshal([]byte(jsonOutput), &result); err != nil {
+		t.Fatalf("failed to parse workspace list JSON: %v\nOutput: %s", err, jsonOutput)
+	}
+	return result
+}
+
 // ---------------------------------------------------------------------------
 // 1. Lifecycle Tests
 // ---------------------------------------------------------------------------
@@ -82,10 +91,7 @@ func TestContract_Lifecycle(t *testing.T) {
 		listOut := mustExecCmd(t,
 			"--storage", storageDir, "workspace", "list", "-o", "json")
 
-		var listed api.WorkspacesList
-		if err := json.Unmarshal([]byte(listOut), &listed); err != nil {
-			t.Fatalf("failed to parse list JSON: %v", err)
-		}
+		listed := mustParseWorkspacesList(t, listOut)
 		if len(listed.Items) != 1 {
 			t.Fatalf("expected 1 workspace, got %d", len(listed.Items))
 		}
@@ -111,12 +117,40 @@ func TestContract_Lifecycle(t *testing.T) {
 		listOut2 := mustExecCmd(t,
 			"--storage", storageDir, "workspace", "list", "-o", "json")
 
-		var listed2 api.WorkspacesList
-		if err := json.Unmarshal([]byte(listOut2), &listed2); err != nil {
-			t.Fatalf("failed to parse list JSON after remove: %v", err)
-		}
+		listed2 := mustParseWorkspacesList(t, listOut2)
 		if len(listed2.Items) != 0 {
 			t.Errorf("expected 0 workspaces after remove, got %d", len(listed2.Items))
+		}
+	})
+
+	// FAILS IF: init on the same source directory stops creating separate workspaces.
+	// This is intentional: the same source directory can have multiple workspaces
+	// with different configurations (e.g., different agent setups, MCP servers,
+	// or skills). Workspace identity is the (source, config) pair, not source alone.
+	t.Run("init same directory twice creates separate workspaces", func(t *testing.T) {
+		t.Parallel()
+
+		storageDir := t.TempDir()
+		sourcesDir := t.TempDir()
+
+		// First init
+		id1 := strings.TrimSpace(mustExecCmd(t,
+			"--storage", storageDir, "init", sourcesDir, "--name", "dup-test"))
+
+		// Second init with same source directory
+		id2 := strings.TrimSpace(mustExecCmd(t,
+			"--storage", storageDir, "init", sourcesDir, "--name", "dup-test"))
+
+		// Currently creates two distinct workspaces
+		if id1 == id2 {
+			t.Errorf("expected different IDs for duplicate init, got same: %s", id1)
+		}
+
+		listOut := mustExecCmd(t,
+			"--storage", storageDir, "workspace", "list", "-o", "json")
+		listed := mustParseWorkspacesList(t, listOut)
+		if len(listed.Items) != 2 {
+			t.Errorf("expected 2 workspaces after duplicate init, got %d", len(listed.Items))
 		}
 	})
 
@@ -140,10 +174,7 @@ func TestContract_Lifecycle(t *testing.T) {
 		// Verify all three appear in list
 		listOut := mustExecCmd(t,
 			"--storage", storageDir, "workspace", "list", "-o", "json")
-		var allWs api.WorkspacesList
-		if err := json.Unmarshal([]byte(listOut), &allWs); err != nil {
-			t.Fatalf("failed to parse list JSON: %v", err)
-		}
+		allWs := mustParseWorkspacesList(t, listOut)
 		if len(allWs.Items) != 3 {
 			t.Fatalf("expected 3 workspaces, got %d", len(allWs.Items))
 		}
@@ -154,10 +185,7 @@ func TestContract_Lifecycle(t *testing.T) {
 		// Verify remaining two
 		listOut2 := mustExecCmd(t,
 			"--storage", storageDir, "workspace", "list", "-o", "json")
-		var remaining api.WorkspacesList
-		if err := json.Unmarshal([]byte(listOut2), &remaining); err != nil {
-			t.Fatalf("failed to parse list JSON: %v", err)
-		}
+		remaining := mustParseWorkspacesList(t, listOut2)
 		if len(remaining.Items) != 2 {
 			t.Fatalf("expected 2 workspaces after removal, got %d", len(remaining.Items))
 		}
@@ -360,10 +388,7 @@ func TestContract_JSONSchema(t *testing.T) {
 			"--storage", storageDir, "workspace", "list", "-o", "json")
 
 		// Typed parse
-		var typed api.WorkspacesList
-		if err := json.Unmarshal([]byte(listOut), &typed); err != nil {
-			t.Fatalf("typed parse failed: %v", err)
-		}
+		typed := mustParseWorkspacesList(t, listOut)
 
 		// Untyped parse
 		var untyped map[string][]map[string]interface{}
@@ -488,6 +513,28 @@ func TestContract_OutputFormat(t *testing.T) {
 		}
 	})
 
+	// FAILS IF: version command stops producing output or fails.
+	// CI scripts and container tests use 'kortex-cli version' to verify the binary works.
+	t.Run("version outputs non-empty string", func(t *testing.T) {
+		t.Parallel()
+
+		out, stderr, err := execCmd(t, "version")
+		if err != nil {
+			t.Fatalf("version command failed: %v", err)
+		}
+		if stderr != "" {
+			t.Errorf("version produced stderr: %q", stderr)
+		}
+
+		trimmed := strings.TrimSpace(out)
+		if trimmed == "" {
+			t.Error("version output is empty")
+		}
+		if !strings.Contains(trimmed, "kortex-cli") {
+			t.Errorf("version output missing 'kortex-cli': %q", trimmed)
+		}
+	})
+
 	// FAILS IF: error details are not returned via Execute() error return.
 	t.Run("errors returned via Execute error", func(t *testing.T) {
 		t.Parallel()
@@ -550,10 +597,7 @@ func TestContract_StorageResilience(t *testing.T) {
 		listOut := mustExecCmd(t,
 			"--storage", storageDir, "workspace", "list", "-o", "json")
 
-		var listed api.WorkspacesList
-		if err := json.Unmarshal([]byte(listOut), &listed); err != nil {
-			t.Fatalf("failed to parse JSON from empty storage: %v", err)
-		}
+		listed := mustParseWorkspacesList(t, listOut)
 		if len(listed.Items) != 0 {
 			t.Errorf("expected 0 items from empty storage, got %d", len(listed.Items))
 		}
@@ -581,10 +625,7 @@ func TestContract_StorageResilience(t *testing.T) {
 		// Verify it was persisted
 		listOut := mustExecCmd(t,
 			"--storage", storageDir, "workspace", "list", "-o", "json")
-		var listed api.WorkspacesList
-		if err := json.Unmarshal([]byte(listOut), &listed); err != nil {
-			t.Fatalf("failed to parse list JSON: %v", err)
-		}
+		listed := mustParseWorkspacesList(t, listOut)
 		if len(listed.Items) != 1 {
 			t.Fatalf("expected 1 workspace, got %d", len(listed.Items))
 		}
@@ -607,10 +648,7 @@ func TestContract_StorageResilience(t *testing.T) {
 		// Storage B should still be empty
 		listOut := mustExecCmd(t,
 			"--storage", storageB, "workspace", "list", "-o", "json")
-		var listed api.WorkspacesList
-		if err := json.Unmarshal([]byte(listOut), &listed); err != nil {
-			t.Fatalf("failed to parse JSON: %v", err)
-		}
+		listed := mustParseWorkspacesList(t, listOut)
 		if len(listed.Items) != 0 {
 			t.Errorf("storage B has %d workspaces, expected 0", len(listed.Items))
 		}
@@ -618,10 +656,7 @@ func TestContract_StorageResilience(t *testing.T) {
 		// Storage A should have one
 		listOutA := mustExecCmd(t,
 			"--storage", storageA, "workspace", "list", "-o", "json")
-		var listedA api.WorkspacesList
-		if err := json.Unmarshal([]byte(listOutA), &listedA); err != nil {
-			t.Fatalf("failed to parse JSON: %v", err)
-		}
+		listedA := mustParseWorkspacesList(t, listOutA)
 		if len(listedA.Items) != 1 {
 			t.Errorf("storage A has %d workspaces, expected 1", len(listedA.Items))
 		}
@@ -642,10 +677,7 @@ func TestContract_StorageResilience(t *testing.T) {
 		listOut := mustExecCmd(t,
 			"--storage", storageDir, "workspace", "list", "-o", "json")
 
-		var listed api.WorkspacesList
-		if err := json.Unmarshal([]byte(listOut), &listed); err != nil {
-			t.Fatalf("failed to parse JSON: %v", err)
-		}
+		listed := mustParseWorkspacesList(t, listOut)
 		if len(listed.Items) != 1 {
 			t.Fatalf("expected 1 workspace, got %d", len(listed.Items))
 		}
@@ -827,10 +859,7 @@ func TestContract_SpecialCharacters(t *testing.T) {
 		listOut := mustExecCmd(t,
 			"--storage", storageDir, "workspace", "list", "-o", "json")
 
-		var listed api.WorkspacesList
-		if err := json.Unmarshal([]byte(listOut), &listed); err != nil {
-			t.Fatalf("failed to parse JSON: %v", err)
-		}
+		listed := mustParseWorkspacesList(t, listOut)
 		if len(listed.Items) != 1 {
 			t.Fatalf("expected 1 workspace, got %d", len(listed.Items))
 		}
@@ -853,10 +882,7 @@ func TestContract_SpecialCharacters(t *testing.T) {
 		listOut := mustExecCmd(t,
 			"--storage", storageDir, "workspace", "list", "-o", "json")
 
-		var listed api.WorkspacesList
-		if err := json.Unmarshal([]byte(listOut), &listed); err != nil {
-			t.Fatalf("failed to parse JSON: %v", err)
-		}
+		listed := mustParseWorkspacesList(t, listOut)
 		if len(listed.Items) != 1 {
 			t.Fatalf("expected 1 workspace, got %d", len(listed.Items))
 		}
@@ -881,10 +907,7 @@ func TestContract_SpecialCharacters(t *testing.T) {
 		listOut := mustExecCmd(t,
 			"--storage", storageDir, "workspace", "list", "-o", "json")
 
-		var listed api.WorkspacesList
-		if err := json.Unmarshal([]byte(listOut), &listed); err != nil {
-			t.Fatalf("failed to parse JSON: %v", err)
-		}
+		listed := mustParseWorkspacesList(t, listOut)
 		if len(listed.Items) != 1 {
 			t.Fatalf("expected 1 workspace, got %d", len(listed.Items))
 		}
@@ -909,15 +932,58 @@ func TestContract_SpecialCharacters(t *testing.T) {
 		listOut := mustExecCmd(t,
 			"--storage", storageDir, "workspace", "list", "-o", "json")
 
-		var listed api.WorkspacesList
-		if err := json.Unmarshal([]byte(listOut), &listed); err != nil {
-			t.Fatalf("failed to parse JSON: %v", err)
-		}
+		listed := mustParseWorkspacesList(t, listOut)
 		if len(listed.Items) != 1 {
 			t.Fatalf("expected 1 workspace, got %d", len(listed.Items))
 		}
 		if listed.Items[0].Paths.Source != sourcesDir {
 			t.Errorf("source = %q, want %q", listed.Items[0].Paths.Source, sourcesDir)
+		}
+	})
+}
+
+// ---------------------------------------------------------------------------
+// 8. Unknown Command and Flag Tests
+// ---------------------------------------------------------------------------
+
+func TestContract_UnknownInputs(t *testing.T) {
+	t.Parallel()
+
+	// FAILS IF: an unknown command causes a panic or produces no output.
+	// Cobra's default behavior shows help text for unknown commands (exit 0).
+	t.Run("unknown command shows help text", func(t *testing.T) {
+		t.Parallel()
+
+		out, _, err := execCmd(t, "foobar")
+		if err != nil {
+			t.Fatalf("unexpected error for unknown command: %v", err)
+		}
+		// Cobra shows usage/help when an unknown command is given
+		if !strings.Contains(out, "Usage:") {
+			t.Errorf("expected help text with 'Usage:', got: %q", out)
+		}
+	})
+
+	// FAILS IF: an unknown flag causes a panic or silent exit instead of a helpful error.
+	t.Run("unknown flag returns error", func(t *testing.T) {
+		t.Parallel()
+
+		_, stderr, err := execCmd(t, "init", "--nonexistent-flag")
+		if err == nil {
+			t.Fatal("expected error for unknown flag, got nil")
+		}
+		if !strings.Contains(stderr, "unknown flag") {
+			t.Errorf("stderr = %q, want it to contain 'unknown flag'", stderr)
+		}
+	})
+
+	// FAILS IF: extra arguments to a no-args command cause a panic instead of an error.
+	t.Run("extra arguments to version returns error", func(t *testing.T) {
+		t.Parallel()
+
+		_, _, err := execCmd(t, "version", "extra-arg")
+		if err == nil {
+			t.Fatal("expected error for extra arguments to version, got nil")
 		}
 	})
 }
