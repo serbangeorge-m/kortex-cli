@@ -14,7 +14,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-.PHONY: help build test test-coverage fmt vet clean install check-fmt check-vet ci-checks all
+.PHONY: help build test test-coverage fmt vet clean install check-fmt check-vet ci-checks all test-mutate quality-report
 
 # Binary name
 BINARY_NAME=kortex-cli
@@ -82,3 +82,44 @@ clean: ## Remove build artifacts
 	@rm -f coverage.out coverage.html
 	@rm -f *.test
 	@echo "Clean complete."
+
+test-mutate: ## Run mutation testing with gremlins
+	@echo "Running mutation testing..."
+	@command -v gremlins >/dev/null 2>&1 || (echo "Install gremlins: go install github.com/go-gremlins/gremlins/cmd/gremlins@latest" && exit 1)
+	gremlins unleash --tags="" ./pkg/...
+
+# ── Quality Report ────────────────────────────────────────────────────────────
+
+quality-report: ## Run coverage gap analysis and mutation testing
+	@echo "=== Quality Report ==="
+	@echo ""
+	@echo "── Coverage ──"
+	@$(GO) test -coverprofile=coverage.out -covermode=atomic ./... >/dev/null 2>&1
+	@$(GO) tool cover -func=coverage.out > func-coverage.txt
+	@TOTAL=$$(grep 'total:' func-coverage.txt | awk '{print $$NF}'); \
+	UNCOVERED=$$(grep '0.0%' func-coverage.txt 2>/dev/null | wc -l | tr -d ' '); \
+	PARTIAL=$$(awk -F'\t' '{ pct = $$NF; gsub(/%/, "", pct); if (pct+0 < 80 && pct+0 > 0) print $$0 }' func-coverage.txt 2>/dev/null | wc -l | tr -d ' '); \
+	echo "  Total coverage: $$TOTAL"; \
+	echo "  Uncovered functions (0%): $$UNCOVERED"; \
+	echo "  Partially covered (< 80%): $$PARTIAL"
+	@echo ""
+	@if command -v gremlins >/dev/null 2>&1; then \
+		echo "── Mutation Testing ──"; \
+		gremlins unleash --tags="" ./pkg/... 2>&1 | tee mutation-report.txt || true; \
+		KILLED=$$(grep -c 'KILLED' mutation-report.txt 2>/dev/null || echo "0"); \
+		SURVIVED=$$(grep -c 'SURVIVED' mutation-report.txt 2>/dev/null || echo "0"); \
+		TOTAL_MUT=$$((KILLED + SURVIVED)); \
+		if [ "$$TOTAL_MUT" -gt 0 ]; then \
+			SCORE=$$((KILLED * 100 / TOTAL_MUT)); \
+		else \
+			SCORE=0; \
+		fi; \
+		echo ""; \
+		echo "  Mutation score: $$SCORE% ($$KILLED killed, $$SURVIVED survived)"; \
+	else \
+		echo "── Mutation Testing ──"; \
+		echo "  Skipped (install gremlins: go install github.com/go-gremlins/gremlins/cmd/gremlins@latest)"; \
+	fi
+	@echo ""
+	@echo "=== Report complete ==="
+	@rm -f func-coverage.txt

@@ -1,0 +1,172 @@
+# Copyright (C) 2026 Red Hat, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+name: quality-report
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+jobs:
+  coverage:
+    name: Coverage Analysis
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Go
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Run tests with coverage
+        run: go test -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Generate coverage report
+        run: |
+          go tool cover -html=coverage.out -o coverage.html
+          go tool cover -func=coverage.out > func-coverage.txt
+
+      - name: Analyze coverage gaps
+        id: coverage
+        run: |
+          TOTAL=$(grep 'total:' func-coverage.txt | awk '{print $NF}')
+          echo "total=$TOTAL" >> "$GITHUB_OUTPUT"
+
+          grep '0.0%' func-coverage.txt > gaps.txt 2>/dev/null || true
+          UNCOVERED=$(wc -l < gaps.txt | tr -d ' ')
+          echo "uncovered=$UNCOVERED" >> "$GITHUB_OUTPUT"
+
+          awk -F'\t' '{
+              pct = $NF;
+              gsub(/%/, "", pct);
+              if (pct+0 < 80 && pct+0 > 0) print $0
+          }' func-coverage.txt > partial-gaps.txt 2>/dev/null || true
+          PARTIAL=$(wc -l < partial-gaps.txt | tr -d ' ')
+          echo "partial=$PARTIAL" >> "$GITHUB_OUTPUT"
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: coverage-report
+          path: |
+            coverage.out
+            coverage.html
+            func-coverage.txt
+            gaps.txt
+            partial-gaps.txt
+
+    outputs:
+      total: ${{ steps.coverage.outputs.total }}
+      uncovered: ${{ steps.coverage.outputs.uncovered }}
+      partial: ${{ steps.coverage.outputs.partial }}
+
+  mutation:
+    name: Mutation Testing
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Go
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Install gremlins
+        run: go install github.com/go-gremlins/gremlins/cmd/gremlins@latest
+
+      - name: Run mutation testing
+        run: gremlins unleash --tags="" ./pkg/... 2>&1 | tee mutation-report.txt || true
+
+      - name: Parse mutation results
+        id: mutation
+        run: |
+          KILLED=$(grep -c 'KILLED' mutation-report.txt 2>/dev/null || echo "0")
+          SURVIVED=$(grep -c 'SURVIVED' mutation-report.txt 2>/dev/null || echo "0")
+          NOT_COVERED=$(grep -c 'NOT_COVERED' mutation-report.txt 2>/dev/null || echo "0")
+          TIMED_OUT=$(grep -c 'TIMED_OUT' mutation-report.txt 2>/dev/null || echo "0")
+          TOTAL=$((KILLED + SURVIVED + NOT_COVERED + TIMED_OUT))
+
+          if [ "$TOTAL" -gt 0 ]; then
+            SCORE=$((KILLED * 100 / TOTAL))
+          else
+            SCORE=0
+          fi
+
+          echo "killed=$KILLED" >> "$GITHUB_OUTPUT"
+          echo "survived=$SURVIVED" >> "$GITHUB_OUTPUT"
+          echo "not_covered=$NOT_COVERED" >> "$GITHUB_OUTPUT"
+          echo "timed_out=$TIMED_OUT" >> "$GITHUB_OUTPUT"
+          echo "total=$TOTAL" >> "$GITHUB_OUTPUT"
+          echo "score=$SCORE" >> "$GITHUB_OUTPUT"
+
+      - name: Upload mutation report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: mutation-report
+          path: mutation-report.txt
+
+    outputs:
+      killed: ${{ steps.mutation.outputs.killed }}
+      survived: ${{ steps.mutation.outputs.survived }}
+      not_covered: ${{ steps.mutation.outputs.not_covered }}
+      timed_out: ${{ steps.mutation.outputs.timed_out }}
+      total: ${{ steps.mutation.outputs.total }}
+      score: ${{ steps.mutation.outputs.score }}
+
+  summary:
+    name: Quality Summary
+    runs-on: ubuntu-24.04
+    needs: [coverage, mutation]
+    if: always()
+
+    steps:
+      - name: Write job summary
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'HEADER'
+          # Quality Report
+
+          HEADER
+
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## Coverage
+
+          | Metric | Value |
+          |--------|-------|
+          | Total coverage | **${{ needs.coverage.outputs.total }}** |
+          | Uncovered functions (0%) | ${{ needs.coverage.outputs.uncovered }} |
+          | Partially covered (< 80%) | ${{ needs.coverage.outputs.partial }} |
+
+          ## Mutation Testing
+
+          | Metric | Value |
+          |--------|-------|
+          | Mutation score | **${{ needs.mutation.outputs.score }}%** |
+          | Killed | ${{ needs.mutation.outputs.killed }} |
+          | Survived | ${{ needs.mutation.outputs.survived }} |
+          | Not covered | ${{ needs.mutation.outputs.not_covered }} |
+          | Timed out | ${{ needs.mutation.outputs.timed_out }} |
+          | Total mutants | ${{ needs.mutation.outputs.total }} |
+
+          ## Artifacts
+
+          Download the **coverage-report** and **mutation-report** artifacts from this run for full details.
+          EOF

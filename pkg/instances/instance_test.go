@@ -245,6 +245,189 @@ func TestInstance_IsAccessible(t *testing.T) {
 	})
 }
 
+func TestNewInstanceFromData(t *testing.T) {
+	t.Parallel()
+
+	// FAILS IF: NewInstanceFromData stops creating instances from valid InstanceData
+	t.Run("creates instance from valid data", func(t *testing.T) {
+		t.Parallel()
+
+		data := InstanceData{
+			ID:   "test-id-abc123",
+			Name: "my-workspace",
+			Paths: InstancePaths{
+				Source:        filepath.Join(string(filepath.Separator), "home", "user", "project"),
+				Configuration: filepath.Join(string(filepath.Separator), "home", "user", "project", ".kortex"),
+			},
+		}
+
+		inst, err := NewInstanceFromData(data)
+		if err != nil {
+			t.Fatalf("NewInstanceFromData() unexpected error = %v", err)
+		}
+		if inst == nil {
+			t.Fatal("NewInstanceFromData() returned nil instance")
+		}
+
+		if inst.GetID() != data.ID {
+			t.Errorf("GetID() = %v, want %v", inst.GetID(), data.ID)
+		}
+		if inst.GetName() != data.Name {
+			t.Errorf("GetName() = %v, want %v", inst.GetName(), data.Name)
+		}
+		if inst.GetSourceDir() != data.Paths.Source {
+			t.Errorf("GetSourceDir() = %v, want %v", inst.GetSourceDir(), data.Paths.Source)
+		}
+		if inst.GetConfigDir() != data.Paths.Configuration {
+			t.Errorf("GetConfigDir() = %v, want %v", inst.GetConfigDir(), data.Paths.Configuration)
+		}
+	})
+
+	// FAILS IF: NewInstanceFromData stops validating empty ID
+	t.Run("returns error for empty ID", func(t *testing.T) {
+		t.Parallel()
+
+		data := InstanceData{
+			ID:   "",
+			Name: "my-workspace",
+			Paths: InstancePaths{
+				Source:        filepath.Join(string(filepath.Separator), "home", "user", "project"),
+				Configuration: filepath.Join(string(filepath.Separator), "home", "user", "project", ".kortex"),
+			},
+		}
+
+		_, err := NewInstanceFromData(data)
+		if err == nil {
+			t.Fatal("NewInstanceFromData() expected error for empty ID, got nil")
+		}
+		if err.Error() != "instance ID cannot be empty" {
+			t.Errorf("error = %v, want 'instance ID cannot be empty'", err)
+		}
+	})
+
+	// FAILS IF: NewInstanceFromData stops validating empty Name
+	t.Run("returns error for empty name", func(t *testing.T) {
+		t.Parallel()
+
+		data := InstanceData{
+			ID:   "test-id-abc123",
+			Name: "",
+			Paths: InstancePaths{
+				Source:        filepath.Join(string(filepath.Separator), "home", "user", "project"),
+				Configuration: filepath.Join(string(filepath.Separator), "home", "user", "project", ".kortex"),
+			},
+		}
+
+		_, err := NewInstanceFromData(data)
+		if err == nil {
+			t.Fatal("NewInstanceFromData() expected error for empty name, got nil")
+		}
+		if err.Error() != "instance name cannot be empty" {
+			t.Errorf("error = %v, want 'instance name cannot be empty'", err)
+		}
+	})
+
+	// FAILS IF: NewInstanceFromData stops validating empty Source path
+	t.Run("returns error for empty source path", func(t *testing.T) {
+		t.Parallel()
+
+		data := InstanceData{
+			ID:   "test-id-abc123",
+			Name: "my-workspace",
+			Paths: InstancePaths{
+				Source:        "",
+				Configuration: filepath.Join(string(filepath.Separator), "home", "user", "project", ".kortex"),
+			},
+		}
+
+		_, err := NewInstanceFromData(data)
+		if err != ErrInvalidPath {
+			t.Errorf("error = %v, want %v", err, ErrInvalidPath)
+		}
+	})
+
+	// FAILS IF: NewInstanceFromData stops validating empty Configuration path
+	t.Run("returns error for empty configuration path", func(t *testing.T) {
+		t.Parallel()
+
+		data := InstanceData{
+			ID:   "test-id-abc123",
+			Name: "my-workspace",
+			Paths: InstancePaths{
+				Source:        filepath.Join(string(filepath.Separator), "home", "user", "project"),
+				Configuration: "",
+			},
+		}
+
+		_, err := NewInstanceFromData(data)
+		if err != ErrInvalidPath {
+			t.Errorf("error = %v, want %v", err, ErrInvalidPath)
+		}
+	})
+
+	// FAILS IF: NewInstanceFromData stops preserving paths as-is (without re-resolving)
+	t.Run("preserves paths without modification", func(t *testing.T) {
+		t.Parallel()
+
+		sourcePath := filepath.Join(string(filepath.Separator), "specific", "absolute", "source")
+		configPath := filepath.Join(string(filepath.Separator), "specific", "absolute", "config")
+		data := InstanceData{
+			ID:   "test-id-xyz789",
+			Name: "preserved-paths",
+			Paths: InstancePaths{
+				Source:        sourcePath,
+				Configuration: configPath,
+			},
+		}
+
+		inst, err := NewInstanceFromData(data)
+		if err != nil {
+			t.Fatalf("NewInstanceFromData() unexpected error = %v", err)
+		}
+
+		if inst.GetSourceDir() != sourcePath {
+			t.Errorf("GetSourceDir() = %v, want %v (path should be preserved as-is)", inst.GetSourceDir(), sourcePath)
+		}
+		if inst.GetConfigDir() != configPath {
+			t.Errorf("GetConfigDir() = %v, want %v (path should be preserved as-is)", inst.GetConfigDir(), configPath)
+		}
+	})
+
+	// FAILS IF: Dump() round-trip stops being lossless
+	t.Run("round-trips through Dump", func(t *testing.T) {
+		t.Parallel()
+
+		originalData := InstanceData{
+			ID:   "round-trip-id",
+			Name: "round-trip-workspace",
+			Paths: InstancePaths{
+				Source:        filepath.Join(string(filepath.Separator), "round", "trip", "source"),
+				Configuration: filepath.Join(string(filepath.Separator), "round", "trip", "config"),
+			},
+		}
+
+		inst, err := NewInstanceFromData(originalData)
+		if err != nil {
+			t.Fatalf("NewInstanceFromData() unexpected error = %v", err)
+		}
+
+		dumped := inst.Dump()
+
+		if dumped.ID != originalData.ID {
+			t.Errorf("Dump().ID = %v, want %v", dumped.ID, originalData.ID)
+		}
+		if dumped.Name != originalData.Name {
+			t.Errorf("Dump().Name = %v, want %v", dumped.Name, originalData.Name)
+		}
+		if dumped.Paths.Source != originalData.Paths.Source {
+			t.Errorf("Dump().Paths.Source = %v, want %v", dumped.Paths.Source, originalData.Paths.Source)
+		}
+		if dumped.Paths.Configuration != originalData.Paths.Configuration {
+			t.Errorf("Dump().Paths.Configuration = %v, want %v", dumped.Paths.Configuration, originalData.Paths.Configuration)
+		}
+	})
+}
+
 func TestIsDirAccessible(t *testing.T) {
 	t.Parallel()
 

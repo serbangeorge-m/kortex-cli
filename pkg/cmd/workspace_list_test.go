@@ -386,6 +386,98 @@ func TestWorkspaceListCmd_E2E(t *testing.T) {
 		}
 	})
 
+	// FAILS IF: outputJSON stops correctly converting multiple instances to API Workspace format
+	t.Run("outputs JSON with multiple workspaces", func(t *testing.T) {
+		t.Parallel()
+
+		storageDir := t.TempDir()
+		sourcesDir1 := t.TempDir()
+		sourcesDir2 := t.TempDir()
+
+		manager, err := instances.NewManager(storageDir)
+		if err != nil {
+			t.Fatalf("Failed to create manager: %v", err)
+		}
+
+		instance1, err := instances.NewInstance(instances.NewInstanceParams{
+			SourceDir: sourcesDir1,
+			ConfigDir: filepath.Join(sourcesDir1, ".kortex"),
+			Name:      "workspace-one",
+		})
+		if err != nil {
+			t.Fatalf("Failed to create instance 1: %v", err)
+		}
+
+		instance2, err := instances.NewInstance(instances.NewInstanceParams{
+			SourceDir: sourcesDir2,
+			ConfigDir: filepath.Join(sourcesDir2, ".kortex"),
+			Name:      "workspace-two",
+		})
+		if err != nil {
+			t.Fatalf("Failed to create instance 2: %v", err)
+		}
+
+		addedInstance1, err := manager.Add(instance1)
+		if err != nil {
+			t.Fatalf("Failed to add instance 1: %v", err)
+		}
+
+		addedInstance2, err := manager.Add(instance2)
+		if err != nil {
+			t.Fatalf("Failed to add instance 2: %v", err)
+		}
+
+		rootCmd := NewRootCmd()
+		rootCmd.SetArgs([]string{"workspace", "list", "--storage", storageDir, "-o", "json"})
+
+		var output bytes.Buffer
+		rootCmd.SetOut(&output)
+
+		err = rootCmd.Execute()
+		if err != nil {
+			t.Fatalf("Expected no error, got %v", err)
+		}
+
+		var workspacesList api.WorkspacesList
+		err = json.Unmarshal(output.Bytes(), &workspacesList)
+		if err != nil {
+			t.Fatalf("Failed to parse JSON output: %v\nOutput: %s", err, output.String())
+		}
+
+		if len(workspacesList.Items) != 2 {
+			t.Fatalf("Expected 2 items, got %d", len(workspacesList.Items))
+		}
+
+		ws1 := workspacesList.Items[0]
+		if ws1.Id != addedInstance1.GetID() {
+			t.Errorf("Item[0].Id = %s, want %s", ws1.Id, addedInstance1.GetID())
+		}
+		if ws1.Name != addedInstance1.GetName() {
+			t.Errorf("Item[0].Name = %s, want %s", ws1.Name, addedInstance1.GetName())
+		}
+		if ws1.Paths.Source != addedInstance1.GetSourceDir() {
+			t.Errorf("Item[0].Paths.Source = %s, want %s", ws1.Paths.Source, addedInstance1.GetSourceDir())
+		}
+		if ws1.Paths.Configuration != addedInstance1.GetConfigDir() {
+			t.Errorf("Item[0].Paths.Configuration = %s, want %s", ws1.Paths.Configuration, addedInstance1.GetConfigDir())
+		}
+
+		ws2 := workspacesList.Items[1]
+		if ws2.Id != addedInstance2.GetID() {
+			t.Errorf("Item[1].Id = %s, want %s", ws2.Id, addedInstance2.GetID())
+		}
+		if ws2.Name != addedInstance2.GetName() {
+			t.Errorf("Item[1].Name = %s, want %s", ws2.Name, addedInstance2.GetName())
+		}
+		if ws2.Paths.Source != addedInstance2.GetSourceDir() {
+			t.Errorf("Item[1].Paths.Source = %s, want %s", ws2.Paths.Source, addedInstance2.GetSourceDir())
+		}
+		if ws2.Paths.Configuration != addedInstance2.GetConfigDir() {
+			t.Errorf("Item[1].Paths.Configuration = %s, want %s", ws2.Paths.Configuration, addedInstance2.GetConfigDir())
+		}
+	})
+
+	// FAILS IF: outputJSON stops correctly converting single instance to API Workspace format
 	t.Run("outputs JSON with single workspace", func(t *testing.T) {
 		t.Parallel()
 

@@ -60,3 +60,28 @@ jobs:
         with:
           files: ./coverage.out
           fail_ci_if_error: true
+
+  container-test:
+    name: Container Test (${{ matrix.platform }})
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        platform: [linux/amd64, linux/arm64]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up QEMU
+        if: matrix.platform != 'linux/amd64'
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
+        with:
+          platforms: ${{ matrix.platform }}
+
+      - name: Run tests in container
+        run: |
+          podman run --rm \
+            --platform ${{ matrix.platform }} \
+            -v "${{ github.workspace }}:/src:Z" \
+            -w /src \
+            golang:1.25 \
+            sh -c "make ci-checks && make build && ./kortex-cli version"

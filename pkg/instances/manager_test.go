@@ -233,6 +233,51 @@ func TestNewManager(t *testing.T) {
 	})
 }
 
+func TestNewManagerWithFactory(t *testing.T) {
+	t.Parallel()
+
+	// FAILS IF: newManagerWithFactory stops validating nil factory
+	t.Run("returns error for nil factory", func(t *testing.T) {
+		t.Parallel()
+
+		tmpDir := t.TempDir()
+		_, err := newManagerWithFactory(tmpDir, nil, newFakeGenerator())
+		if err == nil {
+			t.Fatal("newManagerWithFactory() expected error for nil factory, got nil")
+		}
+		if err.Error() != "factory cannot be nil" {
+			t.Errorf("error = %v, want 'factory cannot be nil'", err)
+		}
+	})
+
+	// FAILS IF: newManagerWithFactory stops validating nil generator
+	t.Run("returns error for nil generator", func(t *testing.T) {
+		t.Parallel()
+
+		tmpDir := t.TempDir()
+		_, err := newManagerWithFactory(tmpDir, fakeInstanceFactory, nil)
+		if err == nil {
+			t.Fatal("newManagerWithFactory() expected error for nil generator, got nil")
+		}
+		if err.Error() != "generator cannot be nil" {
+			t.Errorf("error = %v, want 'generator cannot be nil'", err)
+		}
+	})
+
+	// FAILS IF: newManagerWithFactory stops validating empty storage directory
+	t.Run("returns error for empty storage directory", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := newManagerWithFactory("", fakeInstanceFactory, newFakeGenerator())
+		if err == nil {
+			t.Fatal("newManagerWithFactory() expected error for empty storage dir, got nil")
+		}
+		if err.Error() != "storage directory cannot be empty" {
+			t.Errorf("error = %v, want 'storage directory cannot be empty'", err)
+		}
+	})
+}
+
 func TestManager_Add(t *testing.T) {
 	t.Parallel()
 
