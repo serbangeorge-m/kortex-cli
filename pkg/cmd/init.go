@@ -34,6 +34,7 @@ type initCmd struct {
 	sourcesDir         string
 	workspaceConfigDir string
 	name               string
+	runtime            string
 	absSourcesDir      string
 	absConfigDir       string
 	manager            instances.Manager
@@ -80,6 +81,17 @@ func (i *initCmd) preRun(cmd *cobra.Command, args []string) error {
 	}
 
 	i.manager = manager
+
+	// Determine runtime: flag takes precedence over environment variable
+	if i.runtime == "" {
+		// Check environment variable
+		if envRuntime := os.Getenv("KORTEX_CLI_DEFAULT_RUNTIME"); envRuntime != "" {
+			i.runtime = envRuntime
+		} else {
+			// Neither flag nor environment variable is set
+			return outputErrorIfJSON(cmd, i.output, fmt.Errorf("runtime is required: use --runtime flag or set KORTEX_CLI_DEFAULT_RUNTIME environment variable"))
+		}
+	}
 
 	// Get sources directory (default to current directory)
 	i.sourcesDir = "."
@@ -133,7 +145,7 @@ func (i *initCmd) run(cmd *cobra.Command, args []string) error {
 	}
 
 	// Add the instance to the manager with runtime
-	addedInstance, err := i.manager.Add(cmd.Context(), instance, "fake")
+	addedInstance, err := i.manager.Add(cmd.Context(), instance, i.runtime)
 	if err != nil {
 		return outputErrorIfJSON(cmd, i.output, err)
 	}
@@ -191,16 +203,16 @@ func NewInitCmd() *cobra.Command {
 The sources directory defaults to the current directory (.) if not specified.
 The workspace configuration directory defaults to .kortex/ inside the sources directory if not specified.`,
 		Example: `# Register current directory as workspace
-kortex-cli init
+kortex-cli init --runtime fake
 
 # Register specific directory as workspace
-kortex-cli init /path/to/project
+kortex-cli init --runtime fake /path/to/project
 
 # Register with custom workspace name
-kortex-cli init --name my-project
+kortex-cli init --runtime fake --name my-project
 
 # Show detailed output
-kortex-cli init --verbose`,
+kortex-cli init --runtime fake --verbose`,
 		Args:    cobra.MaximumNArgs(1),
 		PreRunE: c.preRun,
 		RunE:    c.run,
@@ -211,6 +223,9 @@ kortex-cli init --verbose`,
 
 	// Add name flag
 	cmd.Flags().StringVarP(&c.name, "name", "n", "", "Name for the workspace (default: generated from sources directory)")
+
+	// Add runtime flag
+	cmd.Flags().StringVarP(&c.runtime, "runtime", "r", "", "Runtime to use for the workspace (required if KORTEX_CLI_DEFAULT_RUNTIME is not set)")
 
 	// Add verbose flag
 	cmd.Flags().BoolVarP(&c.verbose, "verbose", "v", false, "Show detailed output")

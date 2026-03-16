@@ -59,7 +59,7 @@ Exit code: `0` (success, but no workspaces registered)
 **Step 2: Register a new workspace**
 
 ```bash
-$ kortex-cli init /path/to/project -o json
+$ kortex-cli init /path/to/project --runtime fake -o json
 ```
 
 ```json
@@ -73,7 +73,7 @@ Exit code: `0` (success)
 **Step 3: Register with verbose output to get full details**
 
 ```bash
-$ kortex-cli init /path/to/another-project -o json -v
+$ kortex-cli init /path/to/another-project --runtime fake -o json -v
 ```
 
 ```json
@@ -164,7 +164,7 @@ All errors are returned in JSON format when using `--output json`, with the erro
 **Error: Non-existent directory**
 
 ```bash
-$ kortex-cli init /tmp/no-exist -o json
+$ kortex-cli init /tmp/no-exist --runtime fake -o json
 ```
 
 ```json
@@ -204,7 +204,7 @@ Exit code: `1` (error)
 #!/bin/bash
 
 # Register a workspace
-output=$(kortex-cli init /path/to/project -o json)
+output=$(kortex-cli init /path/to/project --runtime fake -o json)
 exit_code=$?
 
 if [ $exit_code -eq 0 ]; then
@@ -215,6 +215,82 @@ else
     echo "Error: $error_msg"
     exit 1
 fi
+```
+
+## Environment Variables
+
+kortex-cli supports environment variables for configuring default behavior.
+
+### `KORTEX_CLI_DEFAULT_RUNTIME`
+
+Sets the default runtime to use when registering a workspace with the `init` command.
+
+**Usage:**
+
+```bash
+export KORTEX_CLI_DEFAULT_RUNTIME=fake
+kortex-cli init /path/to/project
+```
+
+**Priority:**
+
+The runtime is determined in the following order (highest to lowest priority):
+
+1. `--runtime` flag (if specified)
+2. `KORTEX_CLI_DEFAULT_RUNTIME` environment variable (if set)
+3. Error if neither is set (runtime is required)
+
+**Example:**
+
+```bash
+# Set the default runtime for the current shell session
+export KORTEX_CLI_DEFAULT_RUNTIME=fake
+
+# Register a workspace using the environment variable
+kortex-cli init /path/to/project
+
+# Override the environment variable with the flag
+kortex-cli init /path/to/another-project --runtime podman
+```
+
+**Notes:**
+
+- The runtime parameter is mandatory when registering workspaces
+- If neither the flag nor the environment variable is set, the `init` command will fail with an error
+- Supported runtime types depend on the available runtime implementations
+- Setting this environment variable is useful for automation scripts or when you consistently use the same runtime
+
+### `KORTEX_CLI_STORAGE`
+
+Sets the default storage directory where kortex-cli stores its data files.
+
+**Usage:**
+
+```bash
+export KORTEX_CLI_STORAGE=/custom/path/to/storage
+kortex-cli init /path/to/project --runtime fake
+```
+
+**Priority:**
+
+The storage directory is determined in the following order (highest to lowest priority):
+
+1. `--storage` flag (if specified)
+2. `KORTEX_CLI_STORAGE` environment variable (if set)
+3. Default: `$HOME/.kortex-cli`
+
+**Example:**
+
+```bash
+# Set a custom storage directory
+export KORTEX_CLI_STORAGE=/var/lib/kortex
+
+# All commands will use this storage directory
+kortex-cli init /path/to/project --runtime fake
+kortex-cli list
+
+# Override the environment variable with the flag
+kortex-cli list --storage /tmp/kortex-storage
 ```
 
 ## Commands
@@ -235,6 +311,7 @@ kortex-cli init [sources-directory] [flags]
 
 #### Flags
 
+- `--runtime, -r <type>` - Runtime to use for the workspace (required if `KORTEX_CLI_DEFAULT_RUNTIME` is not set)
 - `--workspace-configuration <path>` - Directory for workspace configuration files (default: `<sources-directory>/.kortex`)
 - `--name, -n <name>` - Human-readable name for the workspace (default: generated from sources directory)
 - `--verbose, -v` - Show detailed output including all workspace information
@@ -245,28 +322,28 @@ kortex-cli init [sources-directory] [flags]
 
 **Register the current directory:**
 ```bash
-kortex-cli init
+kortex-cli init --runtime fake
 ```
 Output: `a1b2c3d4e5f6...` (workspace ID)
 
 **Register a specific directory:**
 ```bash
-kortex-cli init /path/to/myproject
+kortex-cli init /path/to/myproject --runtime fake
 ```
 
 **Register with a custom name:**
 ```bash
-kortex-cli init /path/to/myproject --name "my-awesome-project"
+kortex-cli init /path/to/myproject --runtime fake --name "my-awesome-project"
 ```
 
 **Register with custom configuration location:**
 ```bash
-kortex-cli init /path/to/myproject --workspace-configuration /path/to/config
+kortex-cli init /path/to/myproject --runtime fake --workspace-configuration /path/to/config
 ```
 
 **View detailed output:**
 ```bash
-kortex-cli init --verbose
+kortex-cli init --runtime fake --verbose
 ```
 Output:
 ```text
@@ -279,7 +356,7 @@ Registered workspace:
 
 **JSON output (default - ID only):**
 ```bash
-kortex-cli init /path/to/myproject --output json
+kortex-cli init /path/to/myproject --runtime fake --output json
 ```
 Output:
 ```json
@@ -290,7 +367,7 @@ Output:
 
 **JSON output with verbose flag (full workspace details):**
 ```bash
-kortex-cli init /path/to/myproject --output json --verbose
+kortex-cli init /path/to/myproject --runtime fake --output json --verbose
 ```
 Output:
 ```json
@@ -306,7 +383,7 @@ Output:
 
 **JSON output with short flags:**
 ```bash
-kortex-cli init -o json -v
+kortex-cli init -r fake -o json -v
 ```
 
 #### Workspace Naming
@@ -317,20 +394,21 @@ kortex-cli init -o json -v
 **Examples:**
 ```bash
 # First workspace in /home/user/project
-kortex-cli init /home/user/project
+kortex-cli init /home/user/project --runtime fake
 # Name: "project"
 
 # Second workspace with the same directory name
-kortex-cli init /home/user/another-location/project --name "project"
+kortex-cli init /home/user/another-location/project --runtime fake --name "project"
 # Name: "project-2"
 
 # Third workspace with the same name
-kortex-cli init /tmp/project --name "project"
+kortex-cli init /tmp/project --runtime fake --name "project"
 # Name: "project-3"
 ```
 
 #### Notes
 
+- **Runtime is required**: You must specify a runtime using either the `--runtime` flag or the `KORTEX_CLI_DEFAULT_RUNTIME` environment variable
 - All directory paths are converted to absolute paths for consistency
 - The workspace ID is a unique identifier generated automatically
 - Workspaces can be listed using the `workspace list` command

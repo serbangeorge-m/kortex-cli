@@ -38,7 +38,9 @@ func TestInitCmd_PreRun(t *testing.T) {
 
 		tempDir := t.TempDir()
 
-		c := &initCmd{}
+		c := &initCmd{
+			runtime: "fake",
+		}
 		cmd := &cobra.Command{}
 		cmd.Flags().String("workspace-configuration", "", "test flag")
 		cmd.Flags().String("storage", tempDir, "test storage flag")
@@ -80,7 +82,9 @@ func TestInitCmd_PreRun(t *testing.T) {
 		tempDir := t.TempDir()
 		sourcesDir := t.TempDir()
 
-		c := &initCmd{}
+		c := &initCmd{
+			runtime: "fake",
+		}
 		cmd := &cobra.Command{}
 		cmd.Flags().String("workspace-configuration", "", "test flag")
 		cmd.Flags().String("storage", tempDir, "test storage flag")
@@ -123,6 +127,7 @@ func TestInitCmd_PreRun(t *testing.T) {
 		configDir := t.TempDir()
 
 		c := &initCmd{
+			runtime:            "fake",
 			workspaceConfigDir: configDir,
 		}
 		cmd := &cobra.Command{}
@@ -163,6 +168,7 @@ func TestInitCmd_PreRun(t *testing.T) {
 		configDir := t.TempDir()
 
 		c := &initCmd{
+			runtime:            "fake",
 			workspaceConfigDir: configDir,
 		}
 		cmd := &cobra.Command{}
@@ -230,7 +236,9 @@ func TestInitCmd_PreRun(t *testing.T) {
 			t.Fatalf("Failed to create relative directory: %v", err)
 		}
 
-		c := &initCmd{}
+		c := &initCmd{
+			runtime: "fake",
+		}
 		cmd := &cobra.Command{}
 		cmd.Flags().String("workspace-configuration", "", "test flag")
 		cmd.Flags().String("storage", storageDir, "test storage flag")
@@ -267,7 +275,9 @@ func TestInitCmd_PreRun(t *testing.T) {
 		tempDir := t.TempDir()
 		nonExistentDir := filepath.Join(tempDir, "does-not-exist")
 
-		c := &initCmd{}
+		c := &initCmd{
+			runtime: "fake",
+		}
 		cmd := &cobra.Command{}
 		cmd.Flags().String("workspace-configuration", "", "test flag")
 		cmd.Flags().String("storage", tempDir, "test storage flag")
@@ -295,7 +305,9 @@ func TestInitCmd_PreRun(t *testing.T) {
 			t.Fatalf("Failed to create test file: %v", err)
 		}
 
-		c := &initCmd{}
+		c := &initCmd{
+			runtime: "fake",
+		}
 		cmd := &cobra.Command{}
 		cmd.Flags().String("workspace-configuration", "", "test flag")
 		cmd.Flags().String("storage", tempDir, "test storage flag")
@@ -318,7 +330,8 @@ func TestInitCmd_PreRun(t *testing.T) {
 		tempDir := t.TempDir()
 
 		c := &initCmd{
-			output: "", // Default empty output
+			runtime: "fake",
+			output:  "", // Default empty output
 		}
 		cmd := &cobra.Command{}
 		cmd.Flags().String("workspace-configuration", "", "test flag")
@@ -342,7 +355,8 @@ func TestInitCmd_PreRun(t *testing.T) {
 		tempDir := t.TempDir()
 
 		c := &initCmd{
-			output: "json",
+			runtime: "fake",
+			output:  "json",
 		}
 		cmd := &cobra.Command{}
 		cmd.Flags().String("workspace-configuration", "", "test flag")
@@ -366,7 +380,8 @@ func TestInitCmd_PreRun(t *testing.T) {
 		tempDir := t.TempDir()
 
 		c := &initCmd{
-			output: "xml",
+			runtime: "fake",
+			output:  "xml",
 		}
 		cmd := &cobra.Command{}
 		cmd.Flags().String("workspace-configuration", "", "test flag")
@@ -399,7 +414,8 @@ func TestInitCmd_PreRun(t *testing.T) {
 		invalidStorage := filepath.Join(notADir, "subdir")
 
 		c := &initCmd{
-			output: "json",
+			runtime: "fake",
+			output:  "json",
 		}
 		cmd := &cobra.Command{}
 		buf := new(bytes.Buffer)
@@ -424,6 +440,86 @@ func TestInitCmd_PreRun(t *testing.T) {
 			t.Errorf("Expected error to contain 'failed to create manager', got: %s", errorResponse.Error)
 		}
 	})
+
+	t.Run("fails when runtime flag is not provided and environment variable is not set", func(t *testing.T) {
+		t.Parallel()
+
+		tempDir := t.TempDir()
+
+		c := &initCmd{
+			runtime: "", // No runtime specified
+		}
+		cmd := &cobra.Command{}
+		cmd.Flags().String("workspace-configuration", "", "test flag")
+		cmd.Flags().String("storage", tempDir, "test storage flag")
+
+		args := []string{}
+
+		err := c.preRun(cmd, args)
+		if err == nil {
+			t.Fatal("Expected preRun() to fail when runtime is not specified")
+		}
+
+		if !strings.Contains(err.Error(), "runtime is required") {
+			t.Errorf("Expected error to contain 'runtime is required', got: %v", err)
+		}
+	})
+
+	t.Run("uses environment variable when runtime flag is not provided", func(t *testing.T) {
+		// Note: Cannot use t.Parallel() when using t.Setenv()
+
+		t.Run("with valid runtime from env", func(t *testing.T) {
+			t.Setenv("KORTEX_CLI_DEFAULT_RUNTIME", "fake")
+
+			tempDir := t.TempDir()
+
+			c := &initCmd{
+				runtime: "", // No runtime flag specified
+			}
+			cmd := &cobra.Command{}
+			cmd.Flags().String("workspace-configuration", "", "test flag")
+			cmd.Flags().String("storage", tempDir, "test storage flag")
+
+			args := []string{}
+
+			err := c.preRun(cmd, args)
+			if err != nil {
+				t.Fatalf("preRun() failed: %v", err)
+			}
+
+			if c.runtime != "fake" {
+				t.Errorf("Expected runtime to be 'fake' from environment variable, got: %s", c.runtime)
+			}
+		})
+	})
+
+	t.Run("runtime flag takes precedence over environment variable", func(t *testing.T) {
+		// Note: Cannot use t.Parallel() when using t.Setenv()
+
+		t.Run("flag overrides env", func(t *testing.T) {
+			t.Setenv("KORTEX_CLI_DEFAULT_RUNTIME", "env-runtime")
+
+			tempDir := t.TempDir()
+
+			c := &initCmd{
+				runtime: "flag-runtime",
+			}
+			cmd := &cobra.Command{}
+			cmd.Flags().String("workspace-configuration", "", "test flag")
+			cmd.Flags().String("storage", tempDir, "test storage flag")
+
+			args := []string{}
+
+			err := c.preRun(cmd, args)
+			if err != nil {
+				t.Fatalf("preRun() failed: %v", err)
+			}
+
+			if c.runtime != "flag-runtime" {
+				t.Errorf("Expected runtime to be 'flag-runtime', got: %s", c.runtime)
+			}
+		})
+	})
 }
 
 func TestInitCmd_E2E(t *testing.T) {
@@ -437,7 +533,7 @@ func TestInitCmd_E2E(t *testing.T) {
 		rootCmd := NewRootCmd()
 		buf := new(bytes.Buffer)
 		rootCmd.SetOut(buf)
-		rootCmd.SetArgs([]string{"--storage", storageDir, "init"})
+		rootCmd.SetArgs([]string{"--storage", storageDir, "init", "--runtime", "fake"})
 
 		err := rootCmd.Execute()
 		if err != nil {
@@ -507,7 +603,7 @@ func TestInitCmd_E2E(t *testing.T) {
 		rootCmd := NewRootCmd()
 		buf := new(bytes.Buffer)
 		rootCmd.SetOut(buf)
-		rootCmd.SetArgs([]string{"--storage", storageDir, "init", sourcesDir})
+		rootCmd.SetArgs([]string{"--storage", storageDir, "init", "--runtime", "fake", sourcesDir})
 
 		err := rootCmd.Execute()
 		if err != nil {
@@ -570,7 +666,7 @@ func TestInitCmd_E2E(t *testing.T) {
 		rootCmd := NewRootCmd()
 		buf := new(bytes.Buffer)
 		rootCmd.SetOut(buf)
-		rootCmd.SetArgs([]string{"--storage", storageDir, "init", "--workspace-configuration", configDir})
+		rootCmd.SetArgs([]string{"--storage", storageDir, "init", "--runtime", "fake", "--workspace-configuration", configDir})
 
 		err := rootCmd.Execute()
 		if err != nil {
@@ -635,7 +731,7 @@ func TestInitCmd_E2E(t *testing.T) {
 		rootCmd := NewRootCmd()
 		buf := new(bytes.Buffer)
 		rootCmd.SetOut(buf)
-		rootCmd.SetArgs([]string{"--storage", storageDir, "init", sourcesDir, "--workspace-configuration", configDir})
+		rootCmd.SetArgs([]string{"--storage", storageDir, "init", "--runtime", "fake", sourcesDir, "--workspace-configuration", configDir})
 
 		err := rootCmd.Execute()
 		if err != nil {
@@ -700,7 +796,7 @@ func TestInitCmd_E2E(t *testing.T) {
 		rootCmd1 := NewRootCmd()
 		buf1 := new(bytes.Buffer)
 		rootCmd1.SetOut(buf1)
-		rootCmd1.SetArgs([]string{"--storage", storageDir, "init", sourcesDir1})
+		rootCmd1.SetArgs([]string{"--storage", storageDir, "init", "--runtime", "fake", sourcesDir1})
 
 		err := rootCmd1.Execute()
 		if err != nil {
@@ -711,7 +807,7 @@ func TestInitCmd_E2E(t *testing.T) {
 		rootCmd2 := NewRootCmd()
 		buf2 := new(bytes.Buffer)
 		rootCmd2.SetOut(buf2)
-		rootCmd2.SetArgs([]string{"--storage", storageDir, "init", sourcesDir2})
+		rootCmd2.SetArgs([]string{"--storage", storageDir, "init", "--runtime", "fake", sourcesDir2})
 
 		err = rootCmd2.Execute()
 		if err != nil {
@@ -791,7 +887,7 @@ func TestInitCmd_E2E(t *testing.T) {
 		rootCmd := NewRootCmd()
 		buf := new(bytes.Buffer)
 		rootCmd.SetOut(buf)
-		rootCmd.SetArgs([]string{"--storage", storageDir, "init", sourcesDir, "--verbose"})
+		rootCmd.SetArgs([]string{"--storage", storageDir, "init", "--runtime", "fake", sourcesDir, "--verbose"})
 
 		err := rootCmd.Execute()
 		if err != nil {
@@ -856,7 +952,7 @@ func TestInitCmd_E2E(t *testing.T) {
 		rootCmd := NewRootCmd()
 		buf := new(bytes.Buffer)
 		rootCmd.SetOut(buf)
-		rootCmd.SetArgs([]string{"--storage", storageDir, "init", sourcesDir})
+		rootCmd.SetArgs([]string{"--storage", storageDir, "init", "--runtime", "fake", sourcesDir})
 
 		err := rootCmd.Execute()
 		if err != nil {
@@ -896,7 +992,7 @@ func TestInitCmd_E2E(t *testing.T) {
 		rootCmd := NewRootCmd()
 		buf := new(bytes.Buffer)
 		rootCmd.SetOut(buf)
-		rootCmd.SetArgs([]string{"--storage", storageDir, "init", sourcesDir, "--name", customName})
+		rootCmd.SetArgs([]string{"--storage", storageDir, "init", "--runtime", "fake", sourcesDir, "--name", customName})
 
 		err := rootCmd.Execute()
 		if err != nil {
@@ -950,7 +1046,7 @@ func TestInitCmd_E2E(t *testing.T) {
 		rootCmd1 := NewRootCmd()
 		buf1 := new(bytes.Buffer)
 		rootCmd1.SetOut(buf1)
-		rootCmd1.SetArgs([]string{"--storage", storageDir, "init", sourcesDir1})
+		rootCmd1.SetArgs([]string{"--storage", storageDir, "init", "--runtime", "fake", sourcesDir1})
 
 		err := rootCmd1.Execute()
 		if err != nil {
@@ -961,7 +1057,7 @@ func TestInitCmd_E2E(t *testing.T) {
 		rootCmd2 := NewRootCmd()
 		buf2 := new(bytes.Buffer)
 		rootCmd2.SetOut(buf2)
-		rootCmd2.SetArgs([]string{"--storage", storageDir, "init", sourcesDir2, "--name", "project"})
+		rootCmd2.SetArgs([]string{"--storage", storageDir, "init", "--runtime", "fake", sourcesDir2, "--name", "project"})
 
 		err = rootCmd2.Execute()
 		if err != nil {
@@ -972,7 +1068,7 @@ func TestInitCmd_E2E(t *testing.T) {
 		rootCmd3 := NewRootCmd()
 		buf3 := new(bytes.Buffer)
 		rootCmd3.SetOut(buf3)
-		rootCmd3.SetArgs([]string{"--storage", storageDir, "init", sourcesDir3, "--name", "project"})
+		rootCmd3.SetArgs([]string{"--storage", storageDir, "init", "--runtime", "fake", sourcesDir3, "--name", "project"})
 
 		err = rootCmd3.Execute()
 		if err != nil {
@@ -1022,7 +1118,7 @@ func TestInitCmd_E2E(t *testing.T) {
 		rootCmd := NewRootCmd()
 		buf := new(bytes.Buffer)
 		rootCmd.SetOut(buf)
-		rootCmd.SetArgs([]string{"--storage", storageDir, "init", sourcesDir, "--name", customName, "--verbose"})
+		rootCmd.SetArgs([]string{"--storage", storageDir, "init", "--runtime", "fake", sourcesDir, "--name", customName, "--verbose"})
 
 		err := rootCmd.Execute()
 		if err != nil {
@@ -1050,7 +1146,7 @@ func TestInitCmd_E2E(t *testing.T) {
 		buf := new(bytes.Buffer)
 		rootCmd.SetOut(buf)
 		rootCmd.SetErr(buf)
-		rootCmd.SetArgs([]string{"--storage", storageDir, "init", nonExistentDir})
+		rootCmd.SetArgs([]string{"--storage", storageDir, "init", "--runtime", "fake", nonExistentDir})
 
 		err := rootCmd.Execute()
 		if err == nil {
@@ -1092,7 +1188,7 @@ func TestInitCmd_E2E(t *testing.T) {
 		buf := new(bytes.Buffer)
 		rootCmd.SetOut(buf)
 		rootCmd.SetErr(buf)
-		rootCmd.SetArgs([]string{"--storage", storageDir, "init", regularFile})
+		rootCmd.SetArgs([]string{"--storage", storageDir, "init", "--runtime", "fake", regularFile})
 
 		err := rootCmd.Execute()
 		if err == nil {
@@ -1128,7 +1224,7 @@ func TestInitCmd_E2E(t *testing.T) {
 		rootCmd := NewRootCmd()
 		buf := new(bytes.Buffer)
 		rootCmd.SetOut(buf)
-		rootCmd.SetArgs([]string{"--storage", storageDir, "init", sourcesDir, "--output", "json"})
+		rootCmd.SetArgs([]string{"--storage", storageDir, "init", "--runtime", "fake", sourcesDir, "--output", "json"})
 
 		err := rootCmd.Execute()
 		if err != nil {
@@ -1185,7 +1281,7 @@ func TestInitCmd_E2E(t *testing.T) {
 		rootCmd := NewRootCmd()
 		buf := new(bytes.Buffer)
 		rootCmd.SetOut(buf)
-		rootCmd.SetArgs([]string{"--storage", storageDir, "init", sourcesDir, "--output", "json", "--verbose"})
+		rootCmd.SetArgs([]string{"--storage", storageDir, "init", "--runtime", "fake", sourcesDir, "--output", "json", "--verbose"})
 
 		err := rootCmd.Execute()
 		if err != nil {
@@ -1250,7 +1346,7 @@ func TestInitCmd_E2E(t *testing.T) {
 		rootCmd := NewRootCmd()
 		buf := new(bytes.Buffer)
 		rootCmd.SetOut(buf)
-		rootCmd.SetArgs([]string{"--storage", storageDir, "init", nonExistentDir, "--output", "json"})
+		rootCmd.SetArgs([]string{"--storage", storageDir, "init", "--runtime", "fake", nonExistentDir, "--output", "json"})
 
 		err := rootCmd.Execute()
 		if err == nil {
@@ -1293,7 +1389,7 @@ func TestInitCmd_E2E(t *testing.T) {
 		rootCmd := NewRootCmd()
 		buf := new(bytes.Buffer)
 		rootCmd.SetOut(buf)
-		rootCmd.SetArgs([]string{"--storage", storageDir, "init", sourcesDir, "--name", customName, "--output", "json", "--verbose"})
+		rootCmd.SetArgs([]string{"--storage", storageDir, "init", "--runtime", "fake", sourcesDir, "--name", customName, "--output", "json", "--verbose"})
 
 		err := rootCmd.Execute()
 		if err != nil {
