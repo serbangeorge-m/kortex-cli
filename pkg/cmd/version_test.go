@@ -20,37 +20,28 @@ package cmd
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 )
 
-func TestRootCmd_HasVersionCommand(t *testing.T) {
+func TestNewVersionCmd(t *testing.T) {
 	t.Parallel()
 
-	rootCmd := NewRootCmd()
-	versionCmd := rootCmd.Commands()
-	found := false
-	for _, cmd := range versionCmd {
-		if cmd.Name() == "version" {
-			found = true
-			break
+	t.Run("prints version string", func(t *testing.T) {
+		t.Parallel()
+
+		cmd := NewVersionCmd()
+		buf := new(bytes.Buffer)
+		cmd.SetOut(buf)
+		cmd.SetArgs([]string{})
+
+		if err := cmd.Execute(); err != nil {
+			t.Fatalf("Execute() failed: %v", err)
 		}
-	}
-	if !found {
-		t.Error("Expected rootCmd to have 'version' subcommand")
-	}
-}
 
-func TestExecute_WithVersion(t *testing.T) {
-	t.Parallel()
-
-	// Redirect output to avoid cluttering test output
-	rootCmd := NewRootCmd()
-	buf := new(bytes.Buffer)
-	rootCmd.SetOut(buf)
-	rootCmd.SetArgs([]string{"version"})
-
-	// Call Execute() and verify it succeeds
-	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("Execute() failed: %v", err)
-	}
+		output := buf.String()
+		if !strings.Contains(output, "kortex-cli") {
+			t.Errorf("expected output to contain 'kortex-cli', got: %s", output)
+		}
+	})
 }

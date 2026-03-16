@@ -113,7 +113,7 @@ Test individual functions and methods in isolation.
 - Use `t.TempDir()` for filesystem isolation
 - Use fake implementations for dependencies (no mocking frameworks)
 
-**Example:** `pkg/cmd/init_test.go` (`TestInitCmd_PreRun`)
+**Example:** `pkg/cmd/init_test.go` (`TestInitCmd_preRun`)
 
 ### E2E Tests
 
@@ -123,7 +123,7 @@ Test full command execution through Cobra.
 - Verify stdout output, persistence, and side effects
 - Use real storage with `t.TempDir()`
 
-**Example:** `pkg/cmd/init_test.go` (`TestInitCmd_E2E`)
+**Example:** `pkg/cmd/init_test.go` (`TestInitCmd_rejectsFileAsSourcesPath`)
 
 ### Contract Tests
 
@@ -139,7 +139,7 @@ Test the CLI from the perspective of an external consumer (the kortex desktop ap
 | `TestContract_Lifecycle` | 4 | Full CRUD flow, duplicate init creates separate workspaces, multi-workspace management, command aliases |
 | `TestContract_JSONSchema` | 5 | Top-level `items` key, non-null empty array, exact field names (`id`, `name`, `paths.source`, `paths.configuration`), deterministic output, typed/untyped parsing agreement |
 | `TestContract_OutputFormat` | 5 | `init` outputs exactly one line (the ID), `init --verbose` outputs structured labels, `version` outputs non-empty string, `remove` outputs exactly one line (the ID), errors returned via `Execute()` |
-| `TestContract_StorageResilience` | 5 | Corrupted JSON returns error (no panic), empty file treated as empty list, init works with empty file, isolated storage paths, persistence across command invocations |
+| `TestContract_StorageResilience` | 6 | Corrupted JSON returns error in both JSON and text modes (no panic), empty file treated as empty list, init works with empty file, isolated storage paths, persistence across command invocations |
 | `TestContract_HelpText` | 5 | Root help lists all commands, init help lists all flags, workspace help lists subcommands, workspace list help has `--output`, workspace remove help shows `ID` |
 | `TestContract_Stderr` | 4 | Error messages appear in stderr for invalid operations, successful commands produce empty stderr |
 | `TestContract_SpecialCharacters` | 4 | Workspace names with spaces and unicode round-trip correctly, source directories with spaces and unicode are stored and returned exactly |

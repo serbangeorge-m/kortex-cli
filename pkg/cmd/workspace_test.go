@@ -22,33 +22,27 @@ import (
 	"testing"
 )
 
-func TestWorkspaceCmd(t *testing.T) {
+func TestNewWorkspaceCmd(t *testing.T) {
 	t.Parallel()
 
-	cmd := NewWorkspaceCmd()
-	if cmd == nil {
-		t.Fatal("NewWorkspaceCmd() returned nil")
-	}
+	t.Run("registers list and remove subcommands", func(t *testing.T) {
+		t.Parallel()
 
-	if cmd.Use != "workspace" {
-		t.Errorf("Expected Use to be 'workspace', got '%s'", cmd.Use)
-	}
-
-	// Verify list subcommand exists
-	listCmd := cmd.Commands()
-	if len(listCmd) == 0 {
-		t.Fatal("Expected workspace command to have subcommands")
-	}
-
-	foundList := false
-	for _, subCmd := range listCmd {
-		if subCmd.Use == "list" {
-			foundList = true
-			break
+		cmd := NewWorkspaceCmd()
+		if cmd == nil {
+			t.Fatal("NewWorkspaceCmd() returned nil")
 		}
-	}
 
-	if !foundList {
-		t.Error("Expected workspace command to have 'list' subcommand")
-	}
+		subcommands := make(map[string]bool)
+		for _, sub := range cmd.Commands() {
+			subcommands[sub.Name()] = true
+		}
+
+		expected := []string{"list", "remove"}
+		for _, name := range expected {
+			if !subcommands[name] {
+				t.Errorf("expected subcommand %q to be registered", name)
+			}
+		}
+	})
 }

@@ -22,21 +22,25 @@ import (
 	"testing"
 )
 
-func TestRemoveCmd(t *testing.T) {
+func TestNewRemoveCmd(t *testing.T) {
 	t.Parallel()
 
-	cmd := NewRemoveCmd()
-	if cmd == nil {
-		t.Fatal("NewRemoveCmd() returned nil")
-	}
+	t.Run("delegates to workspace remove command", func(t *testing.T) {
+		t.Parallel()
 
-	if cmd.Use != "remove ID" {
-		t.Errorf("Expected Use to be 'remove ID', got '%s'", cmd.Use)
-	}
+		cmd := NewRemoveCmd()
+		if cmd == nil {
+			t.Fatal("NewRemoveCmd() returned nil")
+		}
 
-	// Verify it has the same behavior as workspace remove
-	workspaceRemoveCmd := NewWorkspaceRemoveCmd()
-	if cmd.Short != workspaceRemoveCmd.Short {
-		t.Errorf("Expected Short to match workspace remove, got '%s'", cmd.Short)
-	}
+		if cmd.Use != "remove ID" {
+			t.Errorf("expected Use to be 'remove ID', got '%s'", cmd.Use)
+		}
+
+		// Verify it shares behavior with workspace remove
+		wsRemoveCmd := NewWorkspaceRemoveCmd()
+		if cmd.Short != wsRemoveCmd.Short {
+			t.Errorf("expected Short to match workspace remove (%q), got %q", wsRemoveCmd.Short, cmd.Short)
+		}
+	})
 }

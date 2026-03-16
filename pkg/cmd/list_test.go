@@ -22,21 +22,25 @@ import (
 	"testing"
 )
 
-func TestListCmd(t *testing.T) {
+func TestNewListCmd(t *testing.T) {
 	t.Parallel()
 
-	cmd := NewListCmd()
-	if cmd == nil {
-		t.Fatal("NewListCmd() returned nil")
-	}
+	t.Run("delegates to workspace list command", func(t *testing.T) {
+		t.Parallel()
 
-	if cmd.Use != "list" {
-		t.Errorf("Expected Use to be 'list', got '%s'", cmd.Use)
-	}
+		cmd := NewListCmd()
+		if cmd == nil {
+			t.Fatal("NewListCmd() returned nil")
+		}
 
-	// Verify it has the same behavior as workspace list
-	workspaceListCmd := NewWorkspaceListCmd()
-	if cmd.Short != workspaceListCmd.Short {
-		t.Errorf("Expected Short to match workspace list, got '%s'", cmd.Short)
-	}
+		if cmd.Use != "list" {
+			t.Errorf("expected Use to be 'list', got '%s'", cmd.Use)
+		}
+
+		// Verify it shares behavior with workspace list
+		wsListCmd := NewWorkspaceListCmd()
+		if cmd.Short != wsListCmd.Short {
+			t.Errorf("expected Short to match workspace list (%q), got %q", wsListCmd.Short, cmd.Short)
+		}
+	})
 }

@@ -137,7 +137,7 @@ func TestNewInstance(t *testing.T) {
 		}
 	})
 
-	t.Run("returns error for both empty", func(t *testing.T) {
+	t.Run("returns error when both paths empty", func(t *testing.T) {
 		t.Parallel()
 
 		_, err := NewInstance(NewInstanceParams{

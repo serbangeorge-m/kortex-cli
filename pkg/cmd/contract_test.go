@@ -584,6 +584,23 @@ func TestContract_StorageResilience(t *testing.T) {
 		}
 	})
 
+	// FAILS IF: corrupted storage causes a panic in text output mode.
+	t.Run("corrupted storage returns error in text mode", func(t *testing.T) {
+		t.Parallel()
+
+		storageDir := t.TempDir()
+		storageFile := filepath.Join(storageDir, instances.DefaultStorageFileName)
+		if err := os.WriteFile(storageFile, []byte("{invalid json!!!"), 0644); err != nil {
+			t.Fatalf("failed to write corrupted file: %v", err)
+		}
+
+		_, _, err := execCmd(t,
+			"--storage", storageDir, "workspace", "list")
+		if err == nil {
+			t.Error("expected error with corrupted storage in text mode, got nil")
+		}
+	})
+
 	// FAILS IF: an empty storage file causes a crash instead of returning empty list.
 	t.Run("empty storage file returns empty list", func(t *testing.T) {
 		t.Parallel()

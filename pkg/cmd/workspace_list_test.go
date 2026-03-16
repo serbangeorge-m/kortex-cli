@@ -30,72 +30,6 @@ import (
 func TestWorkspaceListCmd(t *testing.T) {
 	t.Parallel()
 
-	cmd := NewWorkspaceListCmd()
-	if cmd == nil {
-		t.Fatal("NewWorkspaceListCmd() returned nil")
-	}
-
-	if cmd.Use != "list" {
-		t.Errorf("Expected Use to be 'list', got '%s'", cmd.Use)
-	}
-}
-
-func TestWorkspaceListCmd_PreRun(t *testing.T) {
-	t.Parallel()
-
-	t.Run("creates manager from storage flag", func(t *testing.T) {
-		t.Parallel()
-
-		storageDir := t.TempDir()
-		rootCmd := NewRootCmd()
-		rootCmd.SetArgs([]string{"workspace", "list", "--storage", storageDir})
-
-		// Execute to trigger preRun
-		err := rootCmd.Execute()
-		if err != nil {
-			t.Fatalf("Expected no error, got %v", err)
-		}
-	})
-
-	t.Run("accepts no output flag", func(t *testing.T) {
-		t.Parallel()
-
-		storageDir := t.TempDir()
-		rootCmd := NewRootCmd()
-		rootCmd.SetArgs([]string{"workspace", "list", "--storage", storageDir})
-
-		err := rootCmd.Execute()
-		if err != nil {
-			t.Fatalf("Expected no error with no output flag, got %v", err)
-		}
-	})
-
-	t.Run("accepts valid output flag with json", func(t *testing.T) {
-		t.Parallel()
-
-		storageDir := t.TempDir()
-		rootCmd := NewRootCmd()
-		rootCmd.SetArgs([]string{"workspace", "list", "--storage", storageDir, "--output", "json"})
-
-		err := rootCmd.Execute()
-		if err != nil {
-			t.Fatalf("Expected no error with --output json, got %v", err)
-		}
-	})
-
-	t.Run("accepts valid output flag with -o json", func(t *testing.T) {
-		t.Parallel()
-
-		storageDir := t.TempDir()
-		rootCmd := NewRootCmd()
-		rootCmd.SetArgs([]string{"workspace", "list", "--storage", storageDir, "-o", "json"})
-
-		err := rootCmd.Execute()
-		if err != nil {
-			t.Fatalf("Expected no error with -o json, got %v", err)
-		}
-	})
-
 	t.Run("rejects invalid output format", func(t *testing.T) {
 		t.Parallel()
 
@@ -129,10 +63,6 @@ func TestWorkspaceListCmd_PreRun(t *testing.T) {
 			t.Errorf("Expected error to contain 'unsupported output format', got: %v", err)
 		}
 	})
-}
-
-func TestWorkspaceListCmd_E2E(t *testing.T) {
-	t.Parallel()
 
 	t.Run("shows no workspaces message when empty", func(t *testing.T) {
 		t.Parallel()
@@ -296,5 +226,4 @@ func TestWorkspaceListCmd_E2E(t *testing.T) {
 			t.Errorf("Expected output to contain %q, got: %s", expectedConfig2, result)
 		}
 	})
-
 }

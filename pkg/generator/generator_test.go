@@ -19,7 +19,7 @@ import (
 	"testing"
 )
 
-func TestGenerate(t *testing.T) {
+func TestGenerator_Generate(t *testing.T) {
 	t.Parallel()
 
 	gen := New()
@@ -76,7 +76,7 @@ func TestGenerate(t *testing.T) {
 	})
 }
 
-func TestNewWithReader(t *testing.T) {
+func Test_newWithReader(t *testing.T) {
 	t.Parallel()
 
 	t.Run("uses custom reader", func(t *testing.T) {
@@ -98,7 +98,7 @@ func TestNewWithReader(t *testing.T) {
 	})
 }
 
-func TestMathRandReader(t *testing.T) {
+func Test_mathRandReader_Read(t *testing.T) {
 	t.Parallel()
 
 	t.Run("reads requested number of bytes", func(t *testing.T) {

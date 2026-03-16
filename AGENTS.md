@@ -285,7 +285,7 @@ Commands should have two types of tests following the pattern in `pkg/cmd/init_t
    - Verify all field values from `manager.List()` or similar
    - Test multiple scenarios (default args, custom args, edge cases)
 
-**Reference:** See `pkg/cmd/init_test.go` for complete examples of both `preRun` unit tests (in `TestInitCmd_PreRun`) and E2E tests (in `TestInitCmd_E2E`).
+**Reference:** See `pkg/cmd/init_test.go` for complete examples of `preRun` unit tests (in `TestInitCmd_preRun`) and E2E tests (in `TestInitCmd_rejectsFileAsSourcesPath`).
 
 3. **Contract Tests** - Test the CLI from a consumer's perspective (e.g., the desktop app):
    - Located in `pkg/cmd/contract_test.go`
@@ -474,7 +474,7 @@ func TestWithEnvVariable(t *testing.T) {
 }
 ```
 
-**Reference:** See `pkg/cmd/root_test.go:TestRootCmd_StorageEnvVariable()` for an example of testing with environment variables.
+**Reference:** See `pkg/cmd/root_test.go:TestNewRootCmd_storageEnvVariable()` for an example of testing with environment variables.
 
 ### Testing with Fake Objects
 

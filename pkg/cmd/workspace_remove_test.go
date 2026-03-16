@@ -30,19 +30,6 @@ import (
 func TestWorkspaceRemoveCmd(t *testing.T) {
 	t.Parallel()
 
-	cmd := NewWorkspaceRemoveCmd()
-	if cmd == nil {
-		t.Fatal("NewWorkspaceRemoveCmd() returned nil")
-	}
-
-	if cmd.Use != "remove ID" {
-		t.Errorf("Expected Use to be 'remove ID', got '%s'", cmd.Use)
-	}
-}
-
-func TestWorkspaceRemoveCmd_PreRun(t *testing.T) {
-	t.Parallel()
-
 	t.Run("requires ID argument", func(t *testing.T) {
 		t.Parallel()
 
@@ -76,45 +63,6 @@ func TestWorkspaceRemoveCmd_PreRun(t *testing.T) {
 			t.Errorf("Expected error to contain 'accepts 1 arg(s), received 2', got: %v", err)
 		}
 	})
-
-	t.Run("creates manager from storage flag", func(t *testing.T) {
-		t.Parallel()
-
-		storageDir := t.TempDir()
-		sourcesDir := t.TempDir()
-
-		// Create a workspace first
-		manager, err := instances.NewManager(storageDir)
-		if err != nil {
-			t.Fatalf("Failed to create manager: %v", err)
-		}
-
-		instance, err := instances.NewInstance(instances.NewInstanceParams{
-			SourceDir: sourcesDir,
-			ConfigDir: filepath.Join(sourcesDir, ".kortex"),
-		})
-		if err != nil {
-			t.Fatalf("Failed to create instance: %v", err)
-		}
-
-		addedInstance, err := manager.Add(instance)
-		if err != nil {
-			t.Fatalf("Failed to add instance: %v", err)
-		}
-
-		// Now remove it
-		rootCmd := NewRootCmd()
-		rootCmd.SetArgs([]string{"workspace", "remove", addedInstance.GetID(), "--storage", storageDir})
-
-		err = rootCmd.Execute()
-		if err != nil {
-			t.Fatalf("Expected no error, got %v", err)
-		}
-	})
-}
-
-func TestWorkspaceRemoveCmd_E2E(t *testing.T) {
-	t.Parallel()
 
 	t.Run("removes existing workspace by ID", func(t *testing.T) {
 		t.Parallel()
@@ -280,7 +228,7 @@ func TestWorkspaceRemoveCmd_E2E(t *testing.T) {
 		}
 	})
 
-	t.Run("remove command alias works", func(t *testing.T) {
+	t.Run("removes workspace via alias command", func(t *testing.T) {
 		t.Parallel()
 
 		storageDir := t.TempDir()
