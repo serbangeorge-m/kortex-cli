@@ -292,6 +292,7 @@ func (m *manager) Start(ctx context.Context, id string) error {
 			State:      runtimeInfo.State,
 			Info:       runtimeInfo.Info,
 		},
+		Project: instanceToStart.GetProject(),
 	}
 
 	instances[index] = updatedInstance
@@ -360,6 +361,7 @@ func (m *manager) Stop(ctx context.Context, id string) error {
 			State:      runtimeInfo.State,
 			Info:       runtimeInfo.Info,
 		},
+		Project: instanceToStop.GetProject(),
 	}
 
 	instances[index] = updatedInstance

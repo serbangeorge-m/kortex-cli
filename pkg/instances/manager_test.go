@@ -998,6 +998,96 @@ func TestManager_Stop(t *testing.T) {
 			t.Error("Stop() expected error for instance in 'created' state, got nil")
 		}
 	})
+
+	t.Run("preserves project field after Start", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		tmpDir := t.TempDir()
+
+		// Create git detector that returns a project
+		gitDetector := &fakeGitDetector{
+			repoInfo: &git.RepositoryInfo{
+				RootDir:      "/repo/root",
+				RemoteURL:    "https://github.com/kortex-hub/kortex-cli",
+				RelativePath: "",
+			},
+		}
+		manager, _ := newManagerWithFactory(tmpDir, fakeInstanceFactory, newFakeGenerator(), newTestRegistry(tmpDir), gitDetector)
+
+		instanceTmpDir := t.TempDir()
+		inst := newFakeInstance(newFakeInstanceParams{
+			SourceDir:  filepath.Join(instanceTmpDir, "source"),
+			ConfigDir:  filepath.Join(instanceTmpDir, "config"),
+			Accessible: true,
+		})
+
+		// Add instance (project should be auto-detected)
+		added, _ := manager.Add(ctx, AddOptions{Instance: inst, RuntimeType: "fake"})
+
+		// Verify project was set
+		if added.GetProject() != "https://github.com/kortex-hub/kortex-cli/" {
+			t.Errorf("After Add, project = %v, want 'https://github.com/kortex-hub/kortex-cli/'", added.GetProject())
+		}
+
+		// Start the instance
+		err := manager.Start(ctx, added.GetID())
+		if err != nil {
+			t.Fatalf("Start() unexpected error = %v", err)
+		}
+
+		// Verify project is still set after Start
+		updated, _ := manager.Get(added.GetID())
+		if updated.GetProject() != "https://github.com/kortex-hub/kortex-cli/" {
+			t.Errorf("After Start, project = %v, want 'https://github.com/kortex-hub/kortex-cli/'", updated.GetProject())
+		}
+	})
+
+	t.Run("preserves project field after Stop", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.Background()
+		tmpDir := t.TempDir()
+
+		// Create git detector that returns a project
+		gitDetector := &fakeGitDetector{
+			repoInfo: &git.RepositoryInfo{
+				RootDir:      "/repo/root",
+				RemoteURL:    "https://github.com/kortex-hub/kortex-cli",
+				RelativePath: "",
+			},
+		}
+		manager, _ := newManagerWithFactory(tmpDir, fakeInstanceFactory, newFakeGenerator(), newTestRegistry(tmpDir), gitDetector)
+
+		instanceTmpDir := t.TempDir()
+		inst := newFakeInstance(newFakeInstanceParams{
+			SourceDir:  filepath.Join(instanceTmpDir, "source"),
+			ConfigDir:  filepath.Join(instanceTmpDir, "config"),
+			Accessible: true,
+		})
+
+		// Add and start instance
+		added, _ := manager.Add(ctx, AddOptions{Instance: inst, RuntimeType: "fake"})
+		manager.Start(ctx, added.GetID())
+
+		// Verify project was set
+		running, _ := manager.Get(added.GetID())
+		if running.GetProject() != "https://github.com/kortex-hub/kortex-cli/" {
+			t.Errorf("After Start, project = %v, want 'https://github.com/kortex-hub/kortex-cli/'", running.GetProject())
+		}
+
+		// Stop the instance
+		err := manager.Stop(ctx, added.GetID())
+		if err != nil {
+			t.Fatalf("Stop() unexpected error = %v", err)
+		}
+
+		// Verify project is still set after Stop
+		updated, _ := manager.Get(added.GetID())
+		if updated.GetProject() != "https://github.com/kortex-hub/kortex-cli/" {
+			t.Errorf("After Stop, project = %v, want 'https://github.com/kortex-hub/kortex-cli/'", updated.GetProject())
+		}
+	})
 }
 
 func TestManager_Reconcile(t *testing.T) {
